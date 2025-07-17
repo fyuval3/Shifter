@@ -2,16 +2,5 @@
   "buildCommand": "yarn build",
   "devCommand": "yarn dev",
   "installCommand": "yarn install",
-  "framework": "nextjs",
-  "functions": {
-    "app/**": {
-      "maxDuration": 30
-    }
-  },
-  "builds": [
-    {
-      "src": "next.config.js",
-      "use": "@vercel/next"
-    }
-  ]
+  "framework": "nextjs"
 } 
