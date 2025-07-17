@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Schedule, TimeSlotDuration, Assignment } from '@/types';
+import { Schedule, TimeSlotDuration, Assignment, Soldier } from '@/types';
 import { generateId, validateSchedule, getAssignmentsForSlotAndPost, isPostActiveAtTime, addMinutes } from '@/lib/utils';
 
 interface ScheduleControlsProps {
@@ -17,7 +17,37 @@ export default function ScheduleControls({
 }: ScheduleControlsProps) {
   
   const [isValidationExpanded, setIsValidationExpanded] = useState(true);
+  const [unassignedFirst, setUnassignedFirst] = useState(false);
   const validation = validateSchedule(schedule);
+  
+  // Helper function to organize soldiers by groups with preference for unassigned placement
+  const getOrderedSoldiersForAutoFill = () => {
+    const orderedSoldiers: Soldier[] = [];
+    
+    if (unassignedFirst) {
+      // First add unassigned soldiers
+      const unassignedSoldiers = schedule.soldiers.filter(s => !s.groupId);
+      orderedSoldiers.push(...unassignedSoldiers);
+      
+      // Then add soldiers from each group
+      for (const group of schedule.groups) {
+        const groupSoldiers = schedule.soldiers.filter(s => s.groupId === group.id);
+        orderedSoldiers.push(...groupSoldiers);
+      }
+    } else {
+      // First add soldiers from each group
+      for (const group of schedule.groups) {
+        const groupSoldiers = schedule.soldiers.filter(s => s.groupId === group.id);
+        orderedSoldiers.push(...groupSoldiers);
+      }
+      
+      // Then add unassigned soldiers
+      const unassignedSoldiers = schedule.soldiers.filter(s => !s.groupId);
+      orderedSoldiers.push(...unassignedSoldiers);
+    }
+    
+    return orderedSoldiers;
+  };
   
   const handleAutoFill = (shuffle = false) => {
     if (schedule.posts.length === 0 || schedule.soldiers.filter(s => s.isAvailable).length === 0) {
@@ -26,7 +56,7 @@ export default function ScheduleControls({
     }
 
     const newAssignments: Assignment[] = [];
-    let availableSoldiers = schedule.soldiers.filter(s => s.isAvailable);
+    let availableSoldiers = getOrderedSoldiersForAutoFill().filter(s => s.isAvailable);
     
     // Shuffle soldiers if requested
     if (shuffle) {
@@ -218,38 +248,58 @@ export default function ScheduleControls({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={() => handleAutoFill(false)}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
-            disabled={schedule.posts.length === 0 || schedule.soldiers.filter(s => s.isAvailable).length === 0}
-          >
-            שבץ אוטומטית
-          </button>
+        <div className="space-y-3">
+          {/* Auto-fill preference */}
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={unassignedFirst}
+                onChange={(e) => setUnassignedFirst(e.target.checked)}
+                className="w-4 h-4 text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500 focus:ring-2"
+              />
+              <span className="text-sm font-medium">
+                שבץ חיילים ללא קבוצה ראשונים באוטו-מילוי
+              </span>
+            </label>
+            <span className="text-xs text-slate-400">
+              (ברירת מחדל: חיילים ללא קבוצה מושבצים אחרונים)
+            </span>
+          </div>
           
-          <button
-            onClick={() => handleAutoFill(true)}
-            className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg transition-colors"
-            disabled={schedule.posts.length === 0 || schedule.soldiers.filter(s => s.isAvailable).length === 0}
-          >
-            ערבב ושבץ אוטומטית
-          </button>
-          
-          <button
-            onClick={handleCompress}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-            disabled={schedule.assignments.length === 0}
-          >
-            דחוס לוח זמנים
-          </button>
-          
-          <button
-            onClick={handleClearAll}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-            disabled={schedule.assignments.length === 0}
-          >
-            נקה הכל
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => handleAutoFill(false)}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+              disabled={schedule.posts.length === 0 || schedule.soldiers.filter(s => s.isAvailable).length === 0}
+            >
+              שבץ אוטומטית
+            </button>
+            
+            <button
+              onClick={() => handleAutoFill(true)}
+              className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg transition-colors"
+              disabled={schedule.posts.length === 0 || schedule.soldiers.filter(s => s.isAvailable).length === 0}
+            >
+              ערבב ושבץ אוטומטית
+            </button>
+            
+            <button
+              onClick={handleCompress}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              disabled={schedule.assignments.length === 0}
+            >
+              דחוס לוח זמנים
+            </button>
+            
+            <button
+              onClick={handleClearAll}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+              disabled={schedule.assignments.length === 0}
+            >
+              נקה הכל
+            </button>
+          </div>
         </div>
 
         {/* Schedule Extension Controls */}
