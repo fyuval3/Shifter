@@ -91,63 +91,6 @@ export default function ScheduleControls({
     onUpdateSchedule({ assignments: newAssignments });
   };
 
-  const handleCompress = () => {
-    if (schedule.assignments.length === 0) {
-      alert('אין שיבוצים לדחיסה');
-      return;
-    }
-
-    const assignments = [...schedule.assignments];
-    const timeSlots = [...schedule.timeSlots];
-    
-    // Find empty slots (slots with no assignments)
-    const slotsWithAssignments = new Set(assignments.map(a => a.timeSlotId));
-    const emptySlotIndices: number[] = [];
-    
-    timeSlots.forEach((slot, index) => {
-      if (!slotsWithAssignments.has(slot.id)) {
-        emptySlotIndices.push(index);
-      }
-    });
-
-    if (emptySlotIndices.length === 0) {
-      alert('אין חורים בלוח הזמנים לדחיסה');
-      return;
-    }
-
-    // Sort empty slots in descending order to avoid index issues when shifting
-    emptySlotIndices.sort((a, b) => b - a);
-
-    // For each empty slot, shift all subsequent assignments forward
-    let shiftAmount = 0;
-    for (let slotIndex = 0; slotIndex < timeSlots.length; slotIndex++) {
-      const currentSlot = timeSlots[slotIndex];
-      
-      // Check if this slot is empty
-      if (emptySlotIndices.includes(slotIndex)) {
-        shiftAmount++;
-        continue;
-      }
-
-      // If we have accumulated shift amount, move assignments from this slot to earlier slot
-      if (shiftAmount > 0) {
-        const targetSlotIndex = slotIndex - shiftAmount;
-        if (targetSlotIndex >= 0) {
-          const targetSlot = timeSlots[targetSlotIndex];
-          
-          // Update assignments that were in the current slot to point to the target slot
-          assignments.forEach(assignment => {
-            if (assignment.timeSlotId === currentSlot.id) {
-              assignment.timeSlotId = targetSlot.id;
-            }
-          });
-        }
-      }
-    }
-
-    onUpdateSchedule({ assignments });
-  };
-
   const handleClearAll = () => {
     if (window.confirm('האם אתה בטוח שברצונך למחוק את כל השיבוצים?')) {
       onUpdateSchedule({ assignments: [] });
@@ -285,14 +228,6 @@ export default function ScheduleControls({
             </button>
             
             <button
-              onClick={handleCompress}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-              disabled={schedule.assignments.length === 0}
-            >
-              דחוס לוח זמנים
-            </button>
-            
-            <button
               onClick={handleClearAll}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
               disabled={schedule.assignments.length === 0}
@@ -312,52 +247,6 @@ export default function ScheduleControls({
           >
             הוסף משמרת
           </button>
-          
-          <button
-            onClick={() => handleAddTimeSlots(3)}
-            className="px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-sm"
-          >
-            הוסף 3 משמרות
-          </button>
-          
-          <button
-            onClick={() => handleAddTimeSlots(5)}
-            className="px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-sm"
-          >
-            הוסף 5 משמרות
-          </button>
-          
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min="1"
-              max="20"
-              placeholder="מספר"
-              className="w-16 px-2 py-1 bg-slate-700 border border-slate-600 rounded text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const value = parseInt((e.target as HTMLInputElement).value);
-                  if (value > 0) {
-                    handleAddTimeSlots(value);
-                    (e.target as HTMLInputElement).value = '';
-                  }
-                }
-              }}
-            />
-            <button
-              onClick={(e) => {
-                const input = e.currentTarget.previousElementSibling as HTMLInputElement;
-                const value = parseInt(input.value);
-                if (value > 0) {
-                  handleAddTimeSlots(value);
-                  input.value = '';
-                }
-              }}
-              className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-sm transition-colors"
-            >
-              הוסף
-            </button>
-          </div>
           
           <button
             onClick={handleRemoveLastTimeSlot}
