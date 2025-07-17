@@ -160,7 +160,7 @@ export default function ScheduleControls({
 
   return (
     <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 space-y-6">
-      <div className="flex flex-wrap gap-4 justify-between items-start">
+      <div className="flex flex-wrap gap-4 items-center">
         {/* Time Slot Duration */}
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium">אורך משמרת:</label>
@@ -182,7 +182,7 @@ export default function ScheduleControls({
           <div className="flex flex-wrap gap-3">
             <button
               onClick={() => handleAutoFill(false)}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+              className="px-3 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-sm"
               disabled={schedule.posts.length === 0 || schedule.soldiers.filter(s => s.isAvailable).length === 0}
             >
               שבץ אוטומטית
@@ -190,7 +190,7 @@ export default function ScheduleControls({
             
             <button
               onClick={() => handleAutoFill(true)}
-              className="px-4 py-2 bg-green-500 hover:bg-green-600 rounded-lg transition-colors"
+              className="px-3 py-2 bg-green-500 hover:bg-green-600 rounded-lg transition-colors text-sm"
               disabled={schedule.posts.length === 0 || schedule.soldiers.filter(s => s.isAvailable).length === 0}
             >
               ערבב ושבץ אוטומטית
@@ -198,7 +198,7 @@ export default function ScheduleControls({
             
             <button
               onClick={handleClearAll}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+              className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm"
               disabled={schedule.assignments.length === 0}
             >
               נקה הכל
