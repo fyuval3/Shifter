@@ -17,34 +17,21 @@ export default function ScheduleControls({
 }: ScheduleControlsProps) {
   
   const [isValidationExpanded, setIsValidationExpanded] = useState(true);
-  const [unassignedFirst, setUnassignedFirst] = useState(false);
   const validation = validateSchedule(schedule);
   
-  // Helper function to organize soldiers by groups with preference for unassigned placement
+  // Helper function to organize soldiers by groups
   const getOrderedSoldiersForAutoFill = () => {
     const orderedSoldiers: Soldier[] = [];
     
-    if (unassignedFirst) {
-      // First add unassigned soldiers
-      const unassignedSoldiers = schedule.soldiers.filter(s => !s.groupId);
-      orderedSoldiers.push(...unassignedSoldiers);
-      
-      // Then add soldiers from each group
-      for (const group of schedule.groups) {
-        const groupSoldiers = schedule.soldiers.filter(s => s.groupId === group.id);
-        orderedSoldiers.push(...groupSoldiers);
-      }
-    } else {
-      // First add soldiers from each group
-      for (const group of schedule.groups) {
-        const groupSoldiers = schedule.soldiers.filter(s => s.groupId === group.id);
-        orderedSoldiers.push(...groupSoldiers);
-      }
-      
-      // Then add unassigned soldiers
-      const unassignedSoldiers = schedule.soldiers.filter(s => !s.groupId);
-      orderedSoldiers.push(...unassignedSoldiers);
+    // First add soldiers from each group
+    for (const group of schedule.groups) {
+      const groupSoldiers = schedule.soldiers.filter(s => s.groupId === group.id);
+      orderedSoldiers.push(...groupSoldiers);
     }
+    
+    // Then add unassigned soldiers
+    const unassignedSoldiers = schedule.soldiers.filter(s => !s.groupId);
+    orderedSoldiers.push(...unassignedSoldiers);
     
     return orderedSoldiers;
   };
@@ -191,25 +178,7 @@ export default function ScheduleControls({
         </div>
 
         {/* Action Buttons */}
-        <div className="space-y-3">
-          {/* Auto-fill preference */}
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={unassignedFirst}
-                onChange={(e) => setUnassignedFirst(e.target.checked)}
-                className="w-4 h-4 text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500 focus:ring-2"
-              />
-              <span className="text-sm font-medium">
-                שבץ חיילים ללא קבוצה ראשונים באוטו-מילוי
-              </span>
-            </label>
-            <span className="text-xs text-slate-400">
-              (ברירת מחדל: חיילים ללא קבוצה מושבצים אחרונים)
-            </span>
-          </div>
-          
+        <div className="space-y-3">          
           <div className="flex flex-wrap gap-3">
             <button
               onClick={() => handleAutoFill(false)}
@@ -238,9 +207,7 @@ export default function ScheduleControls({
         </div>
 
         {/* Schedule Extension Controls */}
-        <div className="flex flex-wrap gap-3 items-center">
-          <span className="text-sm font-medium">הארכת לוח זמנים:</span>
-          
+        <div className="flex flex-wrap gap-3 items-center">          
           <button
             onClick={() => handleAddTimeSlots(1)}
             className="px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-sm"
