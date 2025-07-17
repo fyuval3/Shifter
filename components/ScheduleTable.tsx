@@ -358,7 +358,7 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
                 onClick={() => setHighlightedSoldierId(isHighlighted ? null : soldier.id)}
                 className={`px-3 py-2 rounded-lg transition-all cursor-pointer border-2 ${
                   isHighlighted
-                    ? 'bg-yellow-500 text-black font-bold ring-2 ring-yellow-300 shadow-lg border-yellow-300'
+                    ? 'bg-yellow-500 text-black font-bold shadow-lg border-yellow-300'
                     : groupColor
                     ? 'text-white border-current'
                     : 'bg-slate-600 hover:bg-slate-500 text-slate-200 border-slate-500'
@@ -537,7 +537,7 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
                                       isDropTarget
                                         ? 'ring-2 ring-green-400 bg-green-600 text-white'
                                         : isHighlighted
-                                        ? 'bg-yellow-500 text-black font-bold ring-2 ring-yellow-300 shadow-lg transform'
+                                        ? 'bg-yellow-500 text-black font-bold shadow-lg transform'
                                         : hasWarning
                                         ? 'bg-purple-600 text-white hover:bg-purple-700'
                                         : getSoldierGroupColor(assignment.soldierId)
