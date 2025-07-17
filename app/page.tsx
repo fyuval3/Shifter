@@ -100,7 +100,7 @@ export default function Home() {
       <header className="bg-slate-800 border-b border-slate-700 px-6 py-4">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-orbitron font-black bg-gradient-to-r from-blue-400 via-purple-500 to-blue-600 bg-clip-text text-transparent drop-shadow-lg tracking-wider animate-pulse">
-            ⏰ SHIFTER שיפטר
+            SHIFTER שיפטר
           </h1>
           
           <div className="flex gap-4">
