@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Schedule, Post, Soldier, TimeSlotDuration } from '@/types';
+import { Schedule, TimeSlotDuration } from '@/types';
 import { getCurrentSchedule, saveSchedule, setCurrentSchedule } from '@/lib/storage';
 import { generateId, generateTimeSlots } from '@/lib/utils';
 import PostsManager from '../components/PostsManager';
@@ -35,15 +35,13 @@ export default function Home() {
       name: 'לוח זמנים חדש',
       config: {
         timeSlotDuration: 120, // 2 hours
-        startDate: today,
-        endDate: today,
         startTime: '21:00',
         endTime: '05:00',
       },
       posts: [],
       soldiers: [],
       groups: [],
-      timeSlots: generateTimeSlots('21:00', '05:00', today, 120),
+      timeSlots: generateTimeSlots('21:00', '05:00', 120),
       assignments: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -73,7 +71,6 @@ export default function Home() {
     const newTimeSlots = generateTimeSlots(
       currentSchedule.config.startTime,
       currentSchedule.config.endTime,
-      currentSchedule.config.startDate,
       duration
     );
 
@@ -164,7 +161,6 @@ export default function Home() {
             <ScheduleControls
               schedule={currentSchedule}
               onUpdateSchedule={updateSchedule}
-              onUpdateTimeSlotDuration={updateTimeSlotDuration}
             />
             
             <ScheduleTable
@@ -197,6 +193,7 @@ export default function Home() {
           schedule={currentSchedule}
           onClose={() => setShowSettings(false)}
           onUpdateSchedule={updateSchedule}
+          onUpdateTimeSlotDuration={updateTimeSlotDuration}
         />
       )}
 

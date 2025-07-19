@@ -46,7 +46,6 @@ export interface TimeSlot {
   id: string;
   startTime: string; // e.g., "21:00"
   endTime: string; // e.g., "21:30"
-  date: string; // ISO date string
 }
 
 // Assignment of a soldier to a specific post in a time slot
@@ -60,8 +59,6 @@ export interface Assignment {
 // Schedule configuration
 export interface ScheduleConfig {
   timeSlotDuration: TimeSlotDuration;
-  startDate: string; // ISO date string
-  endDate: string; // ISO date string
   startTime: string; // e.g., "21:00"
   endTime: string; // e.g., "05:00"
 }

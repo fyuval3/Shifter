@@ -1,49 +1,56 @@
 'use client';
 
 import { useState } from 'react';
-import { Schedule } from '@/types';
+import { Schedule, TimeSlotDuration } from '@/types';
 import { generateTimeSlots } from '@/lib/utils';
 
 interface SettingsModalProps {
   schedule: Schedule;
   onClose: () => void;
   onUpdateSchedule: (updates: Partial<Schedule>) => void;
+  onUpdateTimeSlotDuration: (duration: TimeSlotDuration) => void;
 }
 
-export default function SettingsModal({ schedule, onClose, onUpdateSchedule }: SettingsModalProps) {
+export default function SettingsModal({ schedule, onClose, onUpdateSchedule, onUpdateTimeSlotDuration }: SettingsModalProps) {
   const [formData, setFormData] = useState({
     name: schedule.name,
+    timeSlotDuration: schedule.config.timeSlotDuration,
     startTime: schedule.config.startTime,
-    endTime: schedule.config.endTime,
-    startDate: schedule.config.startDate,
-    endDate: schedule.config.endDate,
+    endTime: schedule.config.endTime
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const newTimeSlots = generateTimeSlots(
       formData.startTime,
       formData.endTime,
-      formData.startDate,
       schedule.config.timeSlotDuration
     );
 
     onUpdateSchedule({
-      name: formData.name,
       config: {
         ...schedule.config,
+        timeSlotDuration: formData.timeSlotDuration,
         startTime: formData.startTime,
         endTime: formData.endTime,
-        startDate: formData.startDate,
-        endDate: formData.endDate,
       },
       timeSlots: newTimeSlots,
       assignments: [], // Clear assignments when changing schedule times
     });
 
+    if (formData.timeSlotDuration !== schedule.config.timeSlotDuration) {
+      onUpdateTimeSlotDuration(formData.timeSlotDuration);
+    }
+
     onClose();
   };
+
+  const durations: { value: TimeSlotDuration; label: string }[] = [
+    { value: 30, label: 'חצי שעה' },
+    { value: 60, label: 'שעה' },
+    { value: 120, label: 'שעתיים' },
+  ];
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -62,42 +69,20 @@ export default function SettingsModal({ schedule, onClose, onUpdateSchedule }: S
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2">
-                שם לוח הזמנים
+                אורך משמרת
               </label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              <select
                 className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                תאריך התחלה
-              </label>
-              <input
-                type="date"
-                value={formData.startDate}
-                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                תאריך סיום
-              </label>
-              <input
-                type="date"
-                value={formData.endDate}
-                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                min={formData.startDate}
-                required
-              />
+                value={formData.timeSlotDuration}
+                onChange={(e) => setFormData({ ...formData, timeSlotDuration: +e.target.value as TimeSlotDuration })}
+              >
+                {durations.map(duration => (
+                  <option key={duration.value} value={duration.value}>
+                    {duration.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

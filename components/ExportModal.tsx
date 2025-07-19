@@ -22,7 +22,6 @@ export default function ExportModal({ schedule, onClose }: ExportModalProps) {
     
     if (includeHeaders) {
       text += `🛡️ לוח זמנים: ${schedule.name}\n`;
-      text += `📅 ${schedule.config.startDate}\n`;
       text += `⏰ ${schedule.config.startTime} - ${schedule.config.endTime}\n\n`;
     }
 

@@ -66,7 +66,6 @@ export function getTimeDifferenceInMinutes(startTime: string, endTime: string): 
 export function generateTimeSlots(
   startTime: string,
   endTime: string,
-  date: string,
   duration: TimeSlotDuration
 ): TimeSlot[] {
   const timeSlots: TimeSlot[] = [];
@@ -81,7 +80,6 @@ export function generateTimeSlots(
       id: generateId(),
       startTime: slotStartTime,
       endTime: slotEndTime,
-      date,
     });
   }
   
