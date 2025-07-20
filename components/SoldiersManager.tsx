@@ -8,8 +8,7 @@ import SoldierEditModal from './SoldierEditModal';
 interface SoldiersManagerProps {
   soldiers: Soldier[];
   groups: Group[];
-  onUpdateSoldiers: (soldiers: Soldier[]) => void;
-  onUpdateGroups: (groups: Group[]) => void;
+  onUpdateSoldiersOrGroups: (soldiers: Soldier[], groups: Group[]) => void;
 }
 
 interface DragState {
@@ -20,7 +19,7 @@ interface DragState {
   dropTargetGroupForReorder: string | null;
 }
 
-export default function SoldiersManager({ soldiers, groups, onUpdateSoldiers, onUpdateGroups }: SoldiersManagerProps) {
+export default function SoldiersManager({ soldiers, groups, onUpdateSoldiersOrGroups }: SoldiersManagerProps) {
   // Soldier modal state
   const [soldierModal, setSoldierModal] = useState<{
     isOpen: boolean;
@@ -76,18 +75,18 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiers, on
     if (soldierModal.soldier) {
       // Update existing soldier
       const updatedSoldiers = soldiers.map(s => s.id === soldierModal.soldier!.id ? soldierData : s);
-      onUpdateSoldiers(updatedSoldiers);
+      onUpdateSoldiersOrGroups(updatedSoldiers, groups);
     } else {
       // Add new soldier
-      onUpdateSoldiers([...soldiers, soldierData]);
+      onUpdateSoldiersOrGroups([...soldiers, soldierData], groups);
     }
   };
 
   const handleDelete = (soldierId: string) => {
     if (window.confirm('האם אתה בטוח שברצונך למחוק חייל זה?')) {
       const updatedSoldiers = soldiers.filter(s => s.id !== soldierId);
-      
-      onUpdateSoldiers(updatedSoldiers);
+
+      onUpdateSoldiersOrGroups(updatedSoldiers, groups);
     }
   };
 
@@ -95,7 +94,7 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiers, on
     const updatedSoldiers = soldiers.map(s => 
       s.id === soldierId ? { ...s, isAvailable: !s.isAvailable } : s
     );
-    onUpdateSoldiers(updatedSoldiers);
+    onUpdateSoldiersOrGroups(updatedSoldiers, groups);
   };
 
   // Group management functions
@@ -113,10 +112,10 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiers, on
     if (editingGroup) {
       // Update existing group
       const updatedGroups = groups.map(g => g.id === editingGroup.id ? groupData : g);
-      onUpdateGroups(updatedGroups);
+      onUpdateSoldiersOrGroups(soldiers, updatedGroups);
     } else {
       // Add new group
-      onUpdateGroups([...groups, groupData]);
+      onUpdateSoldiersOrGroups(soldiers, [...groups, groupData]);
     }
 
     resetGroupForm();
@@ -133,13 +132,13 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiers, on
     if (window.confirm('האם אתה בטוח שברצונך למחוק קבוצה זו? חיילים בקבוצה יישארו ללא קבוצה.')) {
       // Remove group
       const updatedGroups = groups.filter(g => g.id !== groupId);
-      onUpdateGroups(updatedGroups);
       
       // Remove group assignment from soldiers
       const updatedSoldiers = soldiers.map(s => 
         s.groupId === groupId ? { ...s, groupId: undefined } : s
       );
-      onUpdateSoldiers(updatedSoldiers);
+
+      onUpdateSoldiersOrGroups(updatedSoldiers, updatedGroups);
     }
   };
 
@@ -214,7 +213,7 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiers, on
     const newSoldiers = [...soldiers];
     [newSoldiers[draggedIndex], newSoldiers[targetIndex]] = [newSoldiers[targetIndex], newSoldiers[draggedIndex]];
 
-    onUpdateSoldiers(newSoldiers);
+    onUpdateSoldiersOrGroups(newSoldiers, groups);
     
     resetDragState();
   };
@@ -258,7 +257,7 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiers, on
         : s
     );
 
-    onUpdateSoldiers(updatedSoldiers);
+    onUpdateSoldiersOrGroups(updatedSoldiers, groups);
     
     resetDragState();
   };
@@ -313,7 +312,7 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiers, on
     const newGroups = [...groups];
     [newGroups[draggedIndex], newGroups[targetIndex]] = [newGroups[targetIndex], newGroups[draggedIndex]];
 
-    onUpdateGroups(newGroups);
+    onUpdateSoldiersOrGroups(soldiers, newGroups);
     resetDragState();
   };
 

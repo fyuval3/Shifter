@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Schedule, Soldier, TimeSlotDuration } from '@/types';
+import { Group, Schedule, Soldier, TimeSlotDuration } from '@/types';
 import { getCurrentSchedule, saveSchedule, setCurrentSchedule } from '@/lib/storage';
 import { generateId, generateTimeSlots } from '@/lib/utils';
 import PostsManager from '../components/PostsManager';
@@ -75,6 +75,23 @@ export default function Home() {
       assignments: updatedAssignments,
       soldiers: updatedSoldiers
     });
+  }
+
+  const updateSoldiersOrGroups = (updatedSoldiers: Soldier[], updatedGroups: Group[]) => {
+    if (!currentSchedule) return;
+
+    const soldierIds = updatedSoldiers.map(s => s.id);
+    const updatedAssignments = currentSchedule.assignments.filter(a => soldierIds.includes(a.soldierId));
+
+    const updatedSchedule = {
+      ...currentSchedule,
+      soldiers: updatedSoldiers,
+      assignments: updatedAssignments,
+      groups: updatedGroups
+    };
+
+    saveSchedule(updatedSchedule);
+    setCurrentScheduleState(updatedSchedule);
   }
 
   const updateTimeSlotDuration = (duration: TimeSlotDuration) => {
@@ -193,8 +210,7 @@ export default function Home() {
           <SoldiersManager
             soldiers={currentSchedule.soldiers}
             groups={currentSchedule.groups}
-            onUpdateSoldiers={(soldiers) => onUpdateSoldiers(soldiers)}
-            onUpdateGroups={(groups) => updateSchedule({ groups })}
+            onUpdateSoldiersOrGroups={updateSoldiersOrGroups}
           />
         )}
       </main>
