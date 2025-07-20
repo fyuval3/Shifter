@@ -147,7 +147,7 @@ export default function Home() {
         </div>
 
         {/* Navigation Tabs */}
-        <nav className="flex gap-1 mt-4">
+        <nav className="flex gap-4 mt-4">
           <button
             onClick={() => setActiveTab('schedule')}
             className={`px-4 py-2 rounded-lg transition-colors ${
