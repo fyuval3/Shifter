@@ -13,7 +13,6 @@ export default function ExportModal({ schedule, onClose }: ExportModalProps) {
   const [exportFormat, setExportFormat] = useState<ExportFormat>('time-first');
   const [includeHeaders, setIncludeHeaders] = useState(false);
   const [includeEmptySlots, setIncludeEmptySlots] = useState(false);
-  const [shifterCredit, setShifterCredit] = useState(true);
   const [includeEndTime, setIncludeEndTime] = useState(false);
   const [exportText, setExportText] = useState('');
 
@@ -113,9 +112,7 @@ export default function ExportModal({ schedule, onClose }: ExportModalProps) {
       text += `• עמדות: ${totalPosts}\n\n`;
     }
 
-    if (shifterCredit) {
-      text += '*_🚀 נוצר ע"י Shifter_*';
-    }
+    text += '*_🚀 Shifter_*';
 
     setExportText(text);
   };
@@ -196,19 +193,7 @@ export default function ExportModal({ schedule, onClose }: ExportModalProps) {
                     className="rounded"
                   />
                   <span className='mx-2'>כלול זמן סיום משמרת</span>
-                </label>
-
-                <label className="flex items-center space-x-2 space-x-reverse">
-                  <input
-                    type="checkbox"
-                    checked={shifterCredit}
-                    onChange={(e) => setShifterCredit(e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className='mx-2'>קרדיט ל- Shifter 😊</span>
-                </label>
-
-                
+                </label>                
               </div>
 
               <div className="flex gap-3">
