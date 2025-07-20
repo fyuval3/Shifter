@@ -86,6 +86,7 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiers, on
   const handleDelete = (soldierId: string) => {
     if (window.confirm('האם אתה בטוח שברצונך למחוק חייל זה?')) {
       const updatedSoldiers = soldiers.filter(s => s.id !== soldierId);
+      
       onUpdateSoldiers(updatedSoldiers);
     }
   };

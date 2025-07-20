@@ -167,15 +167,6 @@ export default function ScheduleControls({
 
     const lastTimeSlot = schedule.timeSlots[schedule.timeSlots.length - 1];
 
-    // Check if the last time slot has any assignments
-    const hasAssignments = schedule.assignments.some(a => a.timeSlotId === lastTimeSlot.id);
-
-    if (hasAssignments) {
-      if (!window.confirm('משמרת הזמן האחרונה מכילה שיבוצים. האם אתה בטוח שברצונך להסיר אותה?')) {
-        return;
-      }
-    }
-
     // Remove the last time slot and any assignments in it
     const newTimeSlots = schedule.timeSlots.slice(0, -1);
     const newAssignments = schedule.assignments.filter(a => a.timeSlotId !== lastTimeSlot.id);
@@ -193,6 +184,32 @@ export default function ScheduleControls({
       }
     });
   };
+
+  const handleRemoveFirstTimeSlot = () => {
+    if (schedule.timeSlots.length <= 1) {
+      alert('לא ניתן להסיר את משמרת הזמן האחרונה');
+      return;
+    }
+
+    const firstTimeSlot = schedule.timeSlots[0];
+
+    // Remove the forst time slot and any assignments in it
+    const newTimeSlots = schedule.timeSlots.slice(1);
+    const newAssignments = schedule.assignments.filter(a => a.timeSlotId !== firstTimeSlot.id);
+
+    // Update config start time to match the new first time slot
+    const newFirstTimeSlot = newTimeSlots[0];
+    const newStartTime = newFirstTimeSlot ? newFirstTimeSlot.startTime : schedule.config.startTime;
+
+    onUpdateSchedule({
+      timeSlots: newTimeSlots,
+      assignments: newAssignments,
+      config: {
+        ...schedule.config,
+        startTime: newStartTime
+      }
+    });
+  }
 
   return (
     <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 space-y-6">
@@ -234,8 +251,16 @@ export default function ScheduleControls({
             </button>
 
             <button
-              onClick={handleRemoveLastTimeSlot}
+              onClick={handleRemoveFirstTimeSlot}
               className="px-3 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors text-sm"
+              disabled={schedule.timeSlots.length <= 1}
+            >
+              הסר משמרת ראשונה
+            </button>
+
+            <button
+              onClick={handleRemoveLastTimeSlot}
+              className="px-3 py-2 bg-orange-400 hover:bg-orange-500 rounded-lg transition-colors text-sm"
               disabled={schedule.timeSlots.length <= 1}
             >
               הסר משמרת אחרונה
