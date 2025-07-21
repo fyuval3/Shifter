@@ -303,6 +303,10 @@ export function validateSchedule(schedule: Schedule): ValidationResult {
         const bIndex = schedule.timeSlots.findIndex(s => s.id === b.timeSlotId);
         return aIndex - bIndex;
       });
+
+      if (soldier.name === 'פרנקל') {
+        console.log(soldierAssignments);
+      }
     
     if (soldierAssignments.length === 0) {
       unassignedSoldiers.push(soldier.id);
