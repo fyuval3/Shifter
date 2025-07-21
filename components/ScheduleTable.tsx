@@ -10,7 +10,8 @@ import {
   removeSoldierFromTimeSlot,
   removeSoldierFromAllAssignments,
   calculateCurrentRestSlotsForSoldier,
-  addMinutes
+  addMinutes,
+  filterIrrelevantAssignments
 } from '@/lib/utils';
 import SwapModal from './SwapModal';
 
@@ -311,7 +312,8 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
     updatedTimeSlots = updatedTimeSlots.concat(schedule.timeSlots.slice(before? timeSlotIndex : timeSlotIndex + 1))
     
     fixTimeSlotTimes(updatedTimeSlots);
-    onUpdateSchedule({ timeSlots: updatedTimeSlots });
+    const updatedAssignments = filterIrrelevantAssignments(schedule.assignments, updatedTimeSlots, schedule.soldiers, schedule.posts);
+    onUpdateSchedule({ timeSlots: updatedTimeSlots, assignments: updatedAssignments });
     setTimeSlotContextMenu(null);
   }
 
@@ -321,7 +323,8 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
     const timeSlot = schedule.timeSlots.find(t => t.id === timeSlotContextMenu.timeSlotId);
     if (!timeSlot) return;
 
-    const newAssignments = schedule.assignments.filter(a => a.timeSlotId !== timeSlot.id);
+    let newAssignments = schedule.assignments.filter(a => a.timeSlotId !== timeSlot.id);
+    newAssignments = filterIrrelevantAssignments(newAssignments, schedule.timeSlots, schedule.soldiers, schedule.posts);
     onUpdateSchedule({ assignments: newAssignments });
     setTimeSlotContextMenu(null);
   }
@@ -330,7 +333,8 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
     if (!timeSlotContextMenu || schedule.timeSlots.length === 1) return;
     const newTimeSlots = schedule.timeSlots.filter(t => t.id !== timeSlotContextMenu.timeSlotId);
     fixTimeSlotTimes(newTimeSlots);
-    const newAssignments = schedule.assignments.filter(a => a.timeSlotId !== timeSlotContextMenu.timeSlotId);
+    let newAssignments = schedule.assignments.filter(a => a.timeSlotId !== timeSlotContextMenu.timeSlotId);
+    newAssignments = filterIrrelevantAssignments(newAssignments, newTimeSlots, schedule.soldiers, schedule.posts);
     onUpdateSchedule({ timeSlots: newTimeSlots, assignments: newAssignments });
     setTimeSlotContextMenu(null);
   }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Schedule, TimeSlotDuration, Assignment, Soldier, TimeSlot } from '@/types';
-import { generateId, validateSchedule, isPostActiveAtTime, addMinutes, getAssignmentsForSoldier } from '@/lib/utils';
+import { generateId, validateSchedule, isPostActiveAtTime, addMinutes, getAssignmentsForSoldier, filterIrrelevantAssignments } from '@/lib/utils';
 
 interface ScheduleControlsProps {
   schedule: Schedule;
@@ -14,6 +14,7 @@ export default function ScheduleControls({
   onUpdateSchedule}: ScheduleControlsProps) {
 
   const [isValidationExpanded, setIsValidationExpanded] = useState(true);
+
   const validation = validateSchedule(schedule);
 
   // Helper function to organize soldiers by groups
