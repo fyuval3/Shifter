@@ -41,6 +41,17 @@ export interface Soldier {
   groupId?: string; // optional group assignment
 }
 
+export interface Shift {
+  id: string;
+  assignments: NewAssignment[];
+}
+
+export interface NewAssignment {
+  id: string;
+  soldierId: string;
+  postId: string;
+}
+
 // Time slot interface
 export interface TimeSlot {
   id: string;
