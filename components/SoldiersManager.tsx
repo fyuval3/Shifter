@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Soldier, Group, GROUP_COLORS, GroupColor } from '@/types';
+import { Soldier, Group, Role, GROUP_COLORS, GroupColor } from '@/types';
 import { generateId } from '@/lib/utils';
 import SoldierEditModal from './SoldierEditModal';
 
 interface SoldiersManagerProps {
   soldiers: Soldier[];
   groups: Group[];
+  roles: Role[];
   onUpdateSoldiersOrGroups: (soldiers: Soldier[], groups: Group[]) => void;
 }
 
@@ -19,7 +20,7 @@ interface DragState {
   dropTargetGroupForReorder: string | null;
 }
 
-export default function SoldiersManager({ soldiers, groups, onUpdateSoldiersOrGroups }: SoldiersManagerProps) {
+export default function SoldiersManager({ soldiers, groups, roles, onUpdateSoldiersOrGroups }: SoldiersManagerProps) {
   // Soldier modal state
   const [soldierModal, setSoldierModal] = useState<{
     isOpen: boolean;
@@ -149,6 +150,8 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiersOrGr
   const getGroupById = (groupId?: string) => groups.find(g => g.id === groupId);
   const getSoldiersByGroup = (groupId?: string) => soldiers.filter(s => s.groupId === groupId);
   const getUnassignedSoldiers = () => soldiers.filter(s => !s.groupId);
+  const getRoleNames = (roleIds: string[]) =>
+    roleIds.map(rid => roles.find(r => r.id === rid)?.name).filter(Boolean).join(', ');
 
   // Helper function to reset drag state
   const resetDragState = () => {
@@ -560,20 +563,28 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiersOrGr
                       }}
                       title="גרור כדי לשנות סדר או על קבוצה להעברה"
                     >
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <div 
-                            className="w-3 h-3 rounded-full" 
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
                             style={{ backgroundColor: group.color }}
                           ></div>
                           <h4 className="font-semibold">{soldier.name}</h4>
                         </div>
+                        {soldier.roleIds.length > 0 && (
+                          <p className="text-xs text-slate-400 mb-1">{getRoleNames(soldier.roleIds)}</p>
+                        )}
                         <span className={`text-sm ${soldier.isAvailable ? 'text-green-400' : 'text-red-400'}`}>
                           {soldier.isAvailable ? 'זמין' : 'לא זמין'}
                         </span>
+                        {soldier.unavailability?.length > 0 && (
+                          <p className="text-xs text-orange-400 mt-0.5">
+                            {soldier.unavailability.length} תקופות אי-זמינות
+                          </p>
+                        )}
                       </div>
-                      
-                      <div className="flex gap-2">
+
+                      <div className="flex gap-2 flex-shrink-0">
                         <button
                           onClick={() => openEditSoldierModal(soldier)}
                           className="px-3 py-1 bg-slate-600 hover:bg-slate-500 rounded text-sm transition-colors"
@@ -603,12 +614,12 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiersOrGr
               <h4 className="text-lg font-semibold text-slate-400">ללא קבוצה</h4>
               <span className="text-sm text-slate-400">({getUnassignedSoldiers().length} חיילים)</span>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {getUnassignedSoldiers().map((soldier) => {
                 const isDragTarget = dragState.dropTargetSoldierId === soldier.id;
                 const isDragging = dragState.draggedSoldierId === soldier.id;
-                
+
                 return (
                   <div
                     key={soldier.id}
@@ -625,17 +636,25 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiersOrGr
                     }`}
                     title="גרור כדי לשנות סדר או על קבוצה להעברה"
                   >
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <div className="w-3 h-3 rounded-full bg-slate-500"></div>
+                        <div className="w-3 h-3 rounded-full bg-slate-500 flex-shrink-0"></div>
                         <h4 className="font-semibold">{soldier.name}</h4>
                       </div>
+                      {soldier.roleIds.length > 0 && (
+                        <p className="text-xs text-slate-400 mb-1">{getRoleNames(soldier.roleIds)}</p>
+                      )}
                       <span className={`text-sm ${soldier.isAvailable ? 'text-green-400' : 'text-red-400'}`}>
                         {soldier.isAvailable ? 'זמין' : 'לא זמין'}
                       </span>
+                      {soldier.unavailability?.length > 0 && (
+                        <p className="text-xs text-orange-400 mt-0.5">
+                          {soldier.unavailability.length} תקופות אי-זמינות
+                        </p>
+                      )}
                     </div>
-                    
-                    <div className="flex gap-2">
+
+                    <div className="flex gap-2 flex-shrink-0">
                       <button
                         onClick={() => openEditSoldierModal(soldier)}
                         className="px-3 py-1 bg-slate-600 hover:bg-slate-500 rounded text-sm transition-colors"
@@ -670,6 +689,7 @@ export default function SoldiersManager({ soldiers, groups, onUpdateSoldiersOrGr
         isOpen={soldierModal.isOpen}
         soldier={soldierModal.soldier}
         groups={groups}
+        roles={roles}
         onClose={closeSoldierModal}
         onSave={handleSaveSoldier}
       />

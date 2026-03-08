@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Group, Schedule, Soldier, TimeSlotDuration } from '@/types';
+import { Group, Role, Schedule, Soldier, TimeSlotDuration } from '@/types';
 import { getCurrentSchedule, saveSchedule, setCurrentSchedule } from '@/lib/storage';
 import { generateId, generateTimeSlots } from '@/lib/utils';
 import PostsManager from '../components/PostsManager';
 import SoldiersManager from '../components/SoldiersManager';
+import RolesManager from '../components/RolesManager';
 import ScheduleTable from '../components/ScheduleTable';
 import ScheduleControls from '../components/ScheduleControls';
 import ExportModal from '../components/ExportModal';
@@ -13,7 +14,7 @@ import SettingsModal from '../components/SettingsModal';
 
 export default function Home() {
   const [currentSchedule, setCurrentScheduleState] = useState<Schedule | null>(null);
-  const [activeTab, setActiveTab] = useState<'schedule' | 'posts' | 'soldiers'>('schedule');
+  const [activeTab, setActiveTab] = useState<'schedule' | 'posts' | 'soldiers' | 'roles'>('schedule');
   const [showExport, setShowExport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -41,6 +42,7 @@ export default function Home() {
       posts: [],
       soldiers: [],
       groups: [],
+      roles: [],
       timeSlots: generateTimeSlots('21:00', '05:00', 120),
       assignments: [],
       createdAt: new Date().toISOString(),
@@ -93,6 +95,26 @@ export default function Home() {
     saveSchedule(updatedSchedule);
     setCurrentScheduleState(updatedSchedule);
   }
+
+  const updateRoles = (updatedRoles: Role[]) => {
+    if (!currentSchedule) return;
+    const roleIds = new Set(updatedRoles.map(r => r.id));
+
+    const updatedSoldiers = currentSchedule.soldiers.map(s => ({
+      ...s,
+      roleIds: s.roleIds.filter(rid => roleIds.has(rid)),
+    }));
+    const updatedPosts = currentSchedule.posts.map(p => ({
+      ...p,
+      eligibleRoleIds: p.eligibleRoleIds.filter(rid => roleIds.has(rid)),
+    }));
+
+    updateSchedule({
+      roles: updatedRoles,
+      soldiers: updatedSoldiers,
+      posts: updatedPosts,
+    });
+  };
 
   const updateTimeSlotDuration = (duration: TimeSlotDuration) => {
     if (!currentSchedule) return;
@@ -180,6 +202,17 @@ export default function Home() {
           >
             ניהול חיילים
           </button>
+
+          <button
+            onClick={() => setActiveTab('roles')}
+            className={`px-4 py-2 rounded-lg transition-colors ${
+              activeTab === 'roles'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+            }`}
+          >
+            ניהול תפקידים
+          </button>
         </nav>
       </header>
 
@@ -202,6 +235,7 @@ export default function Home() {
         {activeTab === 'posts' && (
           <PostsManager
             posts={currentSchedule.posts}
+            roles={currentSchedule.roles}
             onUpdatePosts={(posts) => updateSchedule({ posts })}
           />
         )}
@@ -210,7 +244,17 @@ export default function Home() {
           <SoldiersManager
             soldiers={currentSchedule.soldiers}
             groups={currentSchedule.groups}
+            roles={currentSchedule.roles}
             onUpdateSoldiersOrGroups={updateSoldiersOrGroups}
+          />
+        )}
+
+        {activeTab === 'roles' && (
+          <RolesManager
+            roles={currentSchedule.roles}
+            soldiers={currentSchedule.soldiers}
+            posts={currentSchedule.posts}
+            onUpdateRoles={updateRoles}
           />
         )}
       </main>

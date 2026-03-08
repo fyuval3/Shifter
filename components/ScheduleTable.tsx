@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Schedule, Assignment, Group, Soldier, TimeSlot } from '@/types';
+import { useState, useMemo } from 'react';
+import { Schedule, Assignment, Soldier, TimeSlot, UnfairAssignment } from '@/types';
 import {
   generateId,
   getAssignmentsForSlotAndPost,
@@ -9,7 +9,9 @@ import {
   validateSchedule,
   removeSoldierFromTimeSlot,
   removeSoldierFromAllAssignments,
-  calculateCurrentRestSlotsForSoldier,
+  isSoldierAvailableAtTime,
+  isSoldierEligibleForPost,
+  calculateRestSinceLastShift,
   addMinutes,
   filterIrrelevantAssignments
 } from '@/lib/utils';
@@ -29,210 +31,177 @@ interface DragState {
   dropTargetSoldierId: string | null;
 }
 
+const emptyDragState: DragState = {
+  draggedSoldierId: null,
+  draggedFromAssignmentId: null,
+  dropTargetPostId: null,
+  dropTargetTimeSlotId: null,
+  dropTargetAssignmentId: null,
+  dropTargetSoldierId: null,
+};
+
 export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTableProps) {
-  const [dragState, setDragState] = useState<DragState>({
-    draggedSoldierId: null,
-    draggedFromAssignmentId: null,
-    dropTargetPostId: null,
-    dropTargetTimeSlotId: null,
-    dropTargetAssignmentId: null,
-    dropTargetSoldierId: null,
-  });
+  const [dragState, setDragState] = useState<DragState>(emptyDragState);
   const [highlightedSoldierId, setHighlightedSoldierId] = useState<string | null>(null);
   const [assignmentContextMenu, setAssignmentContextMenu] = useState<{
-    x: number;
-    y: number;
-    assignmentId: string;
+    x: number; y: number; assignmentId: string;
   } | null>(null);
   const [timeSlotContextMenu, setTimeSlotContextMenu] = useState<{
-    x: number;
-    y: number;
-    timeSlotId: string;
+    x: number; y: number; timeSlotId: string;
   } | null>(null);
-
   const [swapModal, setSwapModal] = useState<{
-    isOpen: boolean;
-    draggedSoldierId: string;
-    targetSoldierId: string;
-    draggedAssignmentId: string;
-    targetAssignmentId: string;
-  }>({
-    isOpen: false,
-    draggedSoldierId: '',
-    targetSoldierId: '',
-    draggedAssignmentId: '',
-    targetAssignmentId: '',
-  });
+    isOpen: boolean; draggedSoldierId: string; targetSoldierId: string;
+    draggedAssignmentId: string; targetAssignmentId: string;
+  }>({ isOpen: false, draggedSoldierId: '', targetSoldierId: '', draggedAssignmentId: '', targetAssignmentId: '' });
 
   const validation = validateSchedule(schedule);
 
-  // Helper function to organize soldiers by groups (same order as in soldiers management tab)
-  const getOrderedSoldiers = () => {
-    const orderedSoldiers: Soldier[] = [];
-
-    // First, add soldiers from each group in groups order
-    for (const group of schedule.groups) {
-      const groupSoldiers = schedule.soldiers.filter(s => s.groupId === group.id);
-      orderedSoldiers.push(...groupSoldiers);
+  const unfairMap = useMemo(() => {
+    const m = new Map<string, UnfairAssignment>();
+    for (const u of validation.unfairAssignments) {
+      m.set(u.assignmentId, u);
     }
+    return m;
+  }, [validation.unfairAssignments]);
 
-    // Then add unassigned soldiers
-    const unassignedSoldiers = schedule.soldiers.filter(s => !s.groupId);
-    orderedSoldiers.push(...unassignedSoldiers);
+  const roleMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of schedule.roles) m.set(r.id, r.name);
+    return m;
+  }, [schedule.roles]);
 
-    return orderedSoldiers;
+  const getOrderedSoldiers = () => {
+    const ordered: Soldier[] = [];
+    for (const group of schedule.groups) {
+      ordered.push(...schedule.soldiers.filter(s => s.groupId === group.id));
+    }
+    ordered.push(...schedule.soldiers.filter(s => !s.groupId));
+    return ordered;
   };
 
   const availableSoldiers = getOrderedSoldiers().filter(s => s.isAvailable);
 
-  // Helper function to get soldier's group color
   const getSoldierGroupColor = (soldierId: string): string | undefined => {
     const soldier = schedule.soldiers.find(s => s.id === soldierId);
     if (!soldier?.groupId) return undefined;
-    const group = schedule.groups.find(g => g.id === soldier.groupId);
-    return group?.color;
+    return schedule.groups.find(g => g.id === soldier.groupId)?.color;
   };
+
+  const getSoldierRoleNames = (soldier: Soldier): string => {
+    return soldier.roleIds.map(rid => roleMap.get(rid)).filter(Boolean).join(', ');
+  };
+
+  const isSoldierEligibleForAnyPost = (soldier: Soldier): boolean => {
+    return schedule.posts.some(p => isSoldierEligibleForPost(soldier, p));
+  };
+
+  // --- Drag handlers ---
 
   const handleDragStart = (e: React.DragEvent, soldierId: string, assignmentId?: string) => {
     setDragState({
+      ...emptyDragState,
       draggedSoldierId: soldierId,
       draggedFromAssignmentId: assignmentId || null,
-      dropTargetPostId: null,
-      dropTargetTimeSlotId: null,
-      dropTargetAssignmentId: null,
-      dropTargetSoldierId: null,
     });
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragOver = (e: React.DragEvent, postId: string, timeSlotId: string) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
 
-    setDragState(prev => ({
-      ...prev,
-      dropTargetPostId: postId,
-      dropTargetTimeSlotId: timeSlotId,
-    }));
+    if (dragState.draggedSoldierId) {
+      const soldier = schedule.soldiers.find(s => s.id === dragState.draggedSoldierId);
+      const post = schedule.posts.find(p => p.id === postId);
+      const timeSlot = schedule.timeSlots.find(t => t.id === timeSlotId);
+      if (soldier && post && timeSlot) {
+        if (!isSoldierEligibleForPost(soldier, post) || !isSoldierAvailableAtTime(soldier, timeSlot.startTime)) {
+          e.dataTransfer.dropEffect = 'none';
+          return;
+        }
+      }
+    }
+
+    e.dataTransfer.dropEffect = 'move';
+    setDragState(prev => ({ ...prev, dropTargetPostId: postId, dropTargetTimeSlotId: timeSlotId }));
   };
 
   const handleDragLeave = () => {
-    setDragState(prev => ({
-      ...prev,
-      dropTargetPostId: null,
-      dropTargetTimeSlotId: null,
-    }));
+    setDragState(prev => ({ ...prev, dropTargetPostId: null, dropTargetTimeSlotId: null }));
   };
 
   const handleDrop = (e: React.DragEvent, postId: string, timeSlotId: string) => {
     e.preventDefault();
-
     if (!dragState.draggedSoldierId) return;
 
     const post = schedule.posts.find(p => p.id === postId);
     const timeSlot = schedule.timeSlots.find(t => t.id === timeSlotId);
+    const soldier = schedule.soldiers.find(s => s.id === dragState.draggedSoldierId);
 
-    if (!post || !timeSlot || !isPostActiveAtTime(post, timeSlot.startTime)) {
-      setDragState({
-        draggedSoldierId: null,
-        draggedFromAssignmentId: null,
-        dropTargetPostId: null,
-        dropTargetTimeSlotId: null,
-        dropTargetAssignmentId: null,
-        dropTargetSoldierId: null,
-      });
+    if (!post || !timeSlot || !soldier || !isPostActiveAtTime(post, timeSlot.startTime)) {
+      setDragState(emptyDragState);
       return;
     }
 
-    // Check if dropping on same position
+    // Block if not eligible or not available
+    if (!isSoldierEligibleForPost(soldier, post) || !isSoldierAvailableAtTime(soldier, timeSlot.startTime)) {
+      setDragState(emptyDragState);
+      return;
+    }
+
+    // Dropping on same position
     if (dragState.draggedFromAssignmentId) {
       const fromAssignment = schedule.assignments.find(a => a.id === dragState.draggedFromAssignmentId);
       if (fromAssignment && fromAssignment.postId === postId && fromAssignment.timeSlotId === timeSlotId) {
-        setDragState({
-          draggedSoldierId: null,
-          draggedFromAssignmentId: null,
-          dropTargetPostId: null,
-          dropTargetTimeSlotId: null,
-          dropTargetAssignmentId: null,
-          dropTargetSoldierId: null,
-        });
+        setDragState(emptyDragState);
         return;
       }
     }
 
     let newAssignments = [...schedule.assignments];
 
-    // Remove from previous position if it was a move operation
     if (dragState.draggedFromAssignmentId) {
       newAssignments = newAssignments.filter(a => a.id !== dragState.draggedFromAssignmentId);
     }
 
-    // Check if soldier is already assigned to this time slot (to another post)
     const conflictingAssignment = newAssignments.find(
       a => a.soldierId === dragState.draggedSoldierId && a.timeSlotId === timeSlotId
     );
 
     if (conflictingAssignment) {
-      // If dropping on an occupied cell, try to swap
       const existingAssignments = getAssignmentsForSlotAndPost(newAssignments, timeSlotId, postId);
       if (existingAssignments.length > 0) {
-        // Swap soldiers
         const targetAssignment = existingAssignments[0];
-
-        // Update the conflicting assignment to point to the target soldier's previous post
         if (dragState.draggedFromAssignmentId) {
           const fromAssignment = schedule.assignments.find(a => a.id === dragState.draggedFromAssignmentId);
           if (fromAssignment) {
             newAssignments = newAssignments.map(a =>
-              a.id === conflictingAssignment.id
-                ? { ...a, postId: fromAssignment.postId }
-                : a
+              a.id === conflictingAssignment.id ? { ...a, postId: fromAssignment.postId } : a
             );
           }
         } else {
-          // Remove the conflicting assignment if it's a new assignment
           newAssignments = newAssignments.filter(a => a.id !== conflictingAssignment.id);
         }
-
-        // Update the target assignment with the dragged soldier
         if (dragState.draggedSoldierId) {
           newAssignments = newAssignments.map(a =>
-            a.id === targetAssignment.id
-              ? { ...a, soldierId: dragState.draggedSoldierId! }
-              : a
+            a.id === targetAssignment.id ? { ...a, soldierId: dragState.draggedSoldierId! } : a
           );
         }
       } else {
-        // No one at target position, just move the conflicting assignment
         newAssignments = newAssignments.map(a =>
-          a.id === conflictingAssignment.id
-            ? { ...a, postId }
-            : a
+          a.id === conflictingAssignment.id ? { ...a, postId } : a
         );
       }
     } else {
-      // Check if target cell is full
       const currentAssignments = getAssignmentsForSlotAndPost(newAssignments, timeSlotId, postId);
-
       if (currentAssignments.length >= post.requiredGuards) {
-        // Try to swap with the first soldier in the target cell
         if (currentAssignments.length > 0) {
           const targetAssignment = currentAssignments[0];
-
           if (dragState.draggedFromAssignmentId) {
             const fromAssignment = schedule.assignments.find(a => a.id === dragState.draggedFromAssignmentId);
-            if (fromAssignment) {
-              // Swap the soldiers
-              if (dragState.draggedSoldierId) {
-                newAssignments = newAssignments.map(a => {
-                  if (a.id === targetAssignment.id) {
-                    return { ...a, soldierId: dragState.draggedSoldierId! };
-                  }
-                  return a;
-                });
-              }
-
-              // Create new assignment for the displaced soldier
+            if (fromAssignment && dragState.draggedSoldierId) {
+              newAssignments = newAssignments.map(a =>
+                a.id === targetAssignment.id ? { ...a, soldierId: dragState.draggedSoldierId! } : a
+              );
               newAssignments.push({
                 id: generateId(),
                 soldierId: targetAssignment.soldierId,
@@ -243,7 +212,6 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
           }
         }
       } else {
-        // Create new assignment
         if (dragState.draggedSoldierId) {
           newAssignments.push({
             id: generateId(),
@@ -256,78 +224,43 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
     }
 
     onUpdateSchedule({ assignments: newAssignments });
-
-    setDragState({
-      draggedSoldierId: null,
-      draggedFromAssignmentId: null,
-      dropTargetPostId: null,
-      dropTargetTimeSlotId: null,
-      dropTargetAssignmentId: null,
-      dropTargetSoldierId: null,
-    });
+    setDragState(emptyDragState);
   };
+
+  // --- Context menus ---
 
   const handleAssignmentRightClick = (e: React.MouseEvent, assignmentId: string) => {
     e.preventDefault();
-    setAssignmentContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      assignmentId,
-    });
+    setAssignmentContextMenu({ x: e.clientX, y: e.clientY, assignmentId });
   };
 
   const handleTimeSlotRightClick = (e: React.MouseEvent, timeSlotId: string) => {
     e.preventDefault();
-    setTimeSlotContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      timeSlotId,
-    });
-  }
-
-  const handleAddTimeSlotAbove = () => {
-    if (!timeSlotContextMenu) return;
-    addTimeSlotBeforeOrAfter(timeSlotContextMenu.timeSlotId, true);
-  }
-
-  const handleAddTimeSlotBelow = () => {
-    if (!timeSlotContextMenu) return;
-    addTimeSlotBeforeOrAfter(timeSlotContextMenu.timeSlotId, false);
-  }
+    setTimeSlotContextMenu({ x: e.clientX, y: e.clientY, timeSlotId });
+  };
 
   const addTimeSlotBeforeOrAfter = (timeSlotId: string, before: boolean) => {
     const timeSlotIndex = schedule.timeSlots.findIndex(t => t.id === timeSlotId);
-    if (timeSlotIndex === -1) {
-      return;
-    }
+    if (timeSlotIndex === -1) return;
     const timeSlot = schedule.timeSlots[timeSlotIndex];
 
-    let updatedTimeSlots = schedule.timeSlots.slice(0, before? timeSlotIndex : timeSlotIndex + 1);
-    updatedTimeSlots.push({
-      id: generateId(),
-      startTime: timeSlot.startTime,
-      endTime: timeSlot.endTime
-    });
+    let updatedTimeSlots = schedule.timeSlots.slice(0, before ? timeSlotIndex : timeSlotIndex + 1);
+    updatedTimeSlots.push({ id: generateId(), startTime: timeSlot.startTime, endTime: timeSlot.endTime });
+    updatedTimeSlots = updatedTimeSlots.concat(schedule.timeSlots.slice(before ? timeSlotIndex : timeSlotIndex + 1));
 
-    updatedTimeSlots = updatedTimeSlots.concat(schedule.timeSlots.slice(before? timeSlotIndex : timeSlotIndex + 1))
-    
     fixTimeSlotTimes(updatedTimeSlots);
     const updatedAssignments = filterIrrelevantAssignments(schedule.assignments, updatedTimeSlots, schedule.soldiers, schedule.posts);
     onUpdateSchedule({ timeSlots: updatedTimeSlots, assignments: updatedAssignments });
     setTimeSlotContextMenu(null);
-  }
+  };
 
   const handleClearTimeSlot = () => {
     if (!timeSlotContextMenu) return;
-
-    const timeSlot = schedule.timeSlots.find(t => t.id === timeSlotContextMenu.timeSlotId);
-    if (!timeSlot) return;
-
-    let newAssignments = schedule.assignments.filter(a => a.timeSlotId !== timeSlot.id);
+    let newAssignments = schedule.assignments.filter(a => a.timeSlotId !== timeSlotContextMenu.timeSlotId);
     newAssignments = filterIrrelevantAssignments(newAssignments, schedule.timeSlots, schedule.soldiers, schedule.posts);
     onUpdateSchedule({ assignments: newAssignments });
     setTimeSlotContextMenu(null);
-  }
+  };
 
   const handleRemoveTimeSlot = () => {
     if (!timeSlotContextMenu || schedule.timeSlots.length === 1) return;
@@ -337,72 +270,56 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
     newAssignments = filterIrrelevantAssignments(newAssignments, newTimeSlots, schedule.soldiers, schedule.posts);
     onUpdateSchedule({ timeSlots: newTimeSlots, assignments: newAssignments });
     setTimeSlotContextMenu(null);
-  }
+  };
 
   const fixTimeSlotTimes = (timeSlots: TimeSlot[]) => {
     let currentEndTime = timeSlots[0].endTime;
     for (let i = 1; i < timeSlots.length; i++) {
-      const timeSlot = timeSlots[i];
-      timeSlot.startTime = currentEndTime;
-      timeSlot.endTime = addMinutes(currentEndTime, schedule.config.timeSlotDuration);
-      currentEndTime = timeSlot.endTime;
+      timeSlots[i].startTime = currentEndTime;
+      timeSlots[i].endTime = addMinutes(currentEndTime, schedule.config.timeSlotDuration);
+      currentEndTime = timeSlots[i].endTime;
     }
-  }
+  };
 
   const handleRemoveFromSlot = () => {
     if (!assignmentContextMenu) return;
-
     const assignment = schedule.assignments.find(a => a.id === assignmentContextMenu.assignmentId);
     if (!assignment) return;
-
-    const newAssignments = removeSoldierFromTimeSlot(
-      schedule.assignments,
-      assignment.soldierId,
-      assignment.timeSlotId
-    );
-
-    onUpdateSchedule({ assignments: newAssignments });
+    onUpdateSchedule({ assignments: removeSoldierFromTimeSlot(schedule.assignments, assignment.soldierId, assignment.timeSlotId) });
     setAssignmentContextMenu(null);
   };
 
   const handleRemoveFromAll = () => {
     if (!assignmentContextMenu) return;
-
     const assignment = schedule.assignments.find(a => a.id === assignmentContextMenu.assignmentId);
     if (!assignment) return;
-
-    const newAssignments = removeSoldierFromAllAssignments(
-      schedule.assignments,
-      assignment.soldierId
-    );
-
-    onUpdateSchedule({ assignments: newAssignments });
+    onUpdateSchedule({ assignments: removeSoldierFromAllAssignments(schedule.assignments, assignment.soldierId) });
     setAssignmentContextMenu(null);
   };
 
   const handleAssignmentClick = (soldierId: string) => {
-    if (highlightedSoldierId === soldierId) {
-      // If this soldier is already highlighted, unhighlight
-      setHighlightedSoldierId(null);
-    } else {
-      // Highlight all assignments for this soldier
-      setHighlightedSoldierId(soldierId);
-    }
+    setHighlightedSoldierId(prev => prev === soldierId ? null : soldierId);
   };
 
-  // Close context menu and clear highlighting when clicking elsewhere
   const handleClick = () => {
-    if (assignmentContextMenu) {
-      setAssignmentContextMenu(null);
-    }
-    if (timeSlotContextMenu) {
-      setTimeSlotContextMenu(null);
-    }
-    // Clear highlighting when clicking elsewhere
-    if (highlightedSoldierId) {
-      setHighlightedSoldierId(null);
-    }
+    if (assignmentContextMenu) setAssignmentContextMenu(null);
+    if (timeSlotContextMenu) setTimeSlotContextMenu(null);
+    if (highlightedSoldierId) setHighlightedSoldierId(null);
   };
+
+  // --- Build unfair tooltip ---
+  const buildUnfairTooltip = (unfair: UnfairAssignment): string => {
+    const lines = unfair.moreRestedSoldiers.slice(0, 3).map(s => {
+      const extraHours = (s.extraRestMinutes / 60).toFixed(1);
+      return `${s.soldierName} נח ${extraHours} שעות יותר ומתאים לעמדה זו`;
+    });
+    if (unfair.moreRestedSoldiers.length > 3) {
+      lines.push(`ועוד ${unfair.moreRestedSoldiers.length - 3}...`);
+    }
+    return lines.join('\n');
+  };
+
+  // --- Empty states ---
 
   if (schedule.posts.length === 0) {
     return (
@@ -424,7 +341,7 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
 
   return (
     <div className="space-y-6" onClick={handleClick}>
-      {/* Available Soldiers */}
+      {/* Soldier Bank */}
       <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
         <h3 className="text-lg font-semibold mb-3">חיילים זמינים (לחץ לבחירה או גרור למשמרת)</h3>
         <div className="flex flex-wrap gap-2">
@@ -432,6 +349,8 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
             const isUnassigned = !schedule.assignments.some(a => a.soldierId === soldier.id);
             const isHighlighted = highlightedSoldierId === soldier.id;
             const groupColor = getSoldierGroupColor(soldier.id);
+            const roleNames = getSoldierRoleNames(soldier);
+            const eligible = isSoldierEligibleForAnyPost(soldier);
 
             return (
               <button
@@ -439,27 +358,39 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
                 draggable
                 onDragStart={(e) => handleDragStart(e, soldier.id)}
                 onClick={() => setHighlightedSoldierId(isHighlighted ? null : soldier.id)}
-                className={`px-3 py-2 rounded-lg transition-all cursor-pointer border-2 ${isHighlighted
-                  ? 'bg-yellow-500 text-black font-bold shadow-lg border-yellow-300'
-                  : groupColor
-                    ? 'text-white border-current'
-                    : 'bg-slate-600 hover:bg-slate-500 text-slate-200 border-slate-500'
-                  }`}
+                className={`px-3 py-2 rounded-lg transition-all cursor-pointer border-2 text-right ${
+                  isHighlighted
+                    ? 'bg-yellow-500 text-black font-bold shadow-lg border-yellow-300'
+                    : !eligible
+                      ? 'bg-slate-700 text-slate-500 border-slate-600 opacity-50'
+                      : groupColor
+                        ? 'text-white border-current'
+                        : 'bg-slate-600 hover:bg-slate-500 text-slate-200 border-slate-500'
+                }`}
                 style={{
-                  backgroundColor: !isHighlighted && groupColor ? groupColor : undefined,
-                  borderColor: !isHighlighted && groupColor ? groupColor : undefined
+                  backgroundColor: !isHighlighted && eligible && groupColor ? groupColor : undefined,
+                  borderColor: !isHighlighted && eligible && groupColor ? groupColor : undefined
                 }}
                 title={
-                  isHighlighted
-                    ? 'החייל מודגש בלוח הזמנים'
-                    : isUnassigned
-                      ? 'חייל לא משובץ'
-                      : 'לחץ לבחירה או גרור למשמרת'
+                  !eligible
+                    ? 'אין עמדה מתאימה לתפקיד החייל'
+                    : isHighlighted
+                      ? 'החייל מודגש בלוח הזמנים'
+                      : isUnassigned
+                        ? 'חייל לא משובץ'
+                        : 'לחץ לבחירה או גרור למשמרת'
                 }
               >
-                {soldier.name}
-                {isUnassigned && ' ⚠️'}
-                {isHighlighted && ' ★'}
+                <div className="font-medium">
+                  {soldier.name}
+                  {isUnassigned && ' ⚠️'}
+                  {isHighlighted && ' ★'}
+                </div>
+                {roleNames && (
+                  <div className={`text-[10px] leading-tight ${isHighlighted ? 'text-black/70' : !eligible ? 'text-slate-600' : 'text-white/70'}`}>
+                    {roleNames}
+                  </div>
+                )}
               </button>
             );
           })}
@@ -477,19 +408,18 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
           <table className="w-full text-sm">
             <thead className="bg-slate-700">
               <tr>
-                <th className="px-4 py-3 text-right font-semibold sticky right-0 bg-slate-700 z-10">
-                  זמן
-                </th>
+                <th className="px-4 py-3 text-right font-semibold sticky right-0 bg-slate-700 z-10">זמן</th>
                 {schedule.posts.map((post) => (
                   <th key={post.id} className="px-4 py-3 text-right font-semibold min-w-[120px]">
                     <div>{post.name}</div>
-                    <div className="text-xs text-slate-400">
-                      {post.requiredGuards} שומרים
-                    </div>
-                    {post.activeHours && (
+                    <div className="text-xs text-slate-400">{post.requiredGuards} שומרים</div>
+                    {post.eligibleRoleIds.length > 0 && (
                       <div className="text-xs text-slate-400">
-                        {post.activeHours.start} - {post.activeHours.end}
+                        {post.eligibleRoleIds.map(rid => roleMap.get(rid)).filter(Boolean).join(', ')}
                       </div>
+                    )}
+                    {post.activeHours && (
+                      <div className="text-xs text-slate-400">{post.activeHours.start} - {post.activeHours.end}</div>
                     )}
                   </th>
                 ))}
@@ -497,15 +427,14 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
             </thead>
             <tbody>
               {schedule.timeSlots.map((timeSlot, rowIndex) => {
-                const hasRestWarnings = validation.soldierRestWarnings.some(
-                  w => w.timeSlotId === timeSlot.id
-                );
+                const hasUnfair = validation.unfairAssignments.some(u => u.timeSlotId === timeSlot.id);
 
                 return (
                   <tr
                     key={timeSlot.id}
-                    className={`border-t border-slate-600 ${rowIndex % 2 === 0 ? 'bg-slate-800' : 'bg-slate-900'
-                      } ${hasRestWarnings ? 'bg-purple-900/20' : ''}`}
+                    className={`border-t border-slate-600 ${
+                      rowIndex % 2 === 0 ? 'bg-slate-800' : 'bg-slate-900'
+                    } ${hasUnfair ? 'bg-orange-900/10' : ''}`}
                   >
                     <td
                       className="px-4 py-3 font-medium sticky right-0 bg-inherit z-10 border-l border-slate-600"
@@ -518,34 +447,28 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
 
                     {schedule.posts.map((post) => {
                       const isPostActive = isPostActiveAtTime(post, timeSlot.startTime);
-                      const assignments = getAssignmentsForSlotAndPost(
-                        schedule.assignments,
-                        timeSlot.id,
-                        post.id
-                      );
+                      const assignments = getAssignmentsForSlotAndPost(schedule.assignments, timeSlot.id, post.id);
 
-                      const isDropTarget =
-                        dragState.dropTargetPostId === post.id &&
-                        dragState.dropTargetTimeSlotId === timeSlot.id;
-
+                      const isDropTarget = dragState.dropTargetPostId === post.id && dragState.dropTargetTimeSlotId === timeSlot.id;
                       const isComplete = assignments.length === post.requiredGuards;
                       const isOverfilled = assignments.length > post.requiredGuards;
 
                       return (
                         <td
                           key={post.id}
-                          className={`px-2 py-3 border-l border-slate-600 min-h-[60px] ${!isPostActive
-                            ? 'bg-slate-700 opacity-50'
-                            : isDropTarget
-                              ? 'bg-blue-600/30'
-                              : isOverfilled
-                                ? 'bg-red-900/30'
-                                : isComplete
-                                  ? 'bg-green-900/30'
-                                  : assignments.length > 0
-                                    ? 'bg-yellow-900/30'
-                                    : 'hover:bg-slate-700/50 cursor-pointer'
-                            }`}
+                          className={`px-2 py-3 border-l border-slate-600 min-h-[60px] ${
+                            !isPostActive
+                              ? 'bg-slate-700 opacity-50'
+                              : isDropTarget
+                                ? 'bg-blue-600/30'
+                                : isOverfilled
+                                  ? 'bg-red-900/30'
+                                  : isComplete
+                                    ? 'bg-green-900/30'
+                                    : assignments.length > 0
+                                      ? 'bg-yellow-900/30'
+                                      : 'hover:bg-slate-700/50 cursor-pointer'
+                          }`}
                           onDragOver={isPostActive ? (e) => handleDragOver(e, post.id, timeSlot.id) : undefined}
                           onDragLeave={handleDragLeave}
                           onDrop={isPostActive ? (e) => handleDrop(e, post.id, timeSlot.id) : undefined}
@@ -554,14 +477,12 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
                             <div className="space-y-1">
                               {assignments.map((assignment) => {
                                 const soldier = schedule.soldiers.find(s => s.id === assignment.soldierId);
-                                const restSlots = calculateCurrentRestSlotsForSoldier(soldier!.id, rowIndex, schedule);
-                                const hasWarning = validation.soldierRestWarnings.some(
-                                  w => w.soldierId === assignment.soldierId && w.timeSlotId === timeSlot.id
-                                );
+                                const unfair = unfairMap.get(assignment.id);
                                 const isHighlighted = highlightedSoldierId === assignment.soldierId;
-
-                                const isDropTarget =
-                                  dragState.dropTargetAssignmentId === assignment.id;
+                                const isAssignDropTarget = dragState.dropTargetAssignmentId === assignment.id;
+                                const restMinutes = isHighlighted
+                                  ? calculateRestSinceLastShift(assignment.soldierId, rowIndex, schedule)
+                                  : 0;
 
                                 return (
                                   <div
@@ -569,36 +490,18 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
                                     draggable
                                     onDragStart={(e) => handleDragStart(e, assignment.soldierId, assignment.id)}
                                     onContextMenu={(e) => handleAssignmentRightClick(e, assignment.id)}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleAssignmentClick(assignment.soldierId);
-                                    }}
+                                    onClick={(e) => { e.stopPropagation(); handleAssignmentClick(assignment.soldierId); }}
                                     onDragOver={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setDragState(prev => ({
-                                        ...prev,
-                                        dropTargetAssignmentId: assignment.id,
-                                        dropTargetSoldierId: assignment.soldierId,
-                                      }));
+                                      e.preventDefault(); e.stopPropagation();
+                                      setDragState(prev => ({ ...prev, dropTargetAssignmentId: assignment.id, dropTargetSoldierId: assignment.soldierId }));
                                     }}
                                     onDragLeave={(e) => {
                                       e.stopPropagation();
-                                      setDragState(prev => ({
-                                        ...prev,
-                                        dropTargetAssignmentId: null,
-                                        dropTargetSoldierId: null,
-                                      }));
+                                      setDragState(prev => ({ ...prev, dropTargetAssignmentId: null, dropTargetSoldierId: null }));
                                     }}
                                     onDrop={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-
-                                      if (dragState.draggedSoldierId &&
-                                        dragState.draggedFromAssignmentId &&
-                                        dragState.draggedSoldierId !== assignment.soldierId) {
-
-                                        // Show swap modal
+                                      e.preventDefault(); e.stopPropagation();
+                                      if (dragState.draggedSoldierId && dragState.draggedFromAssignmentId && dragState.draggedSoldierId !== assignment.soldierId) {
                                         setSwapModal({
                                           isOpen: true,
                                           draggedSoldierId: dragState.draggedSoldierId,
@@ -607,56 +510,49 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
                                           targetAssignmentId: assignment.id,
                                         });
                                       }
-
-                                      setDragState({
-                                        draggedSoldierId: null,
-                                        draggedFromAssignmentId: null,
-                                        dropTargetPostId: null,
-                                        dropTargetTimeSlotId: null,
-                                        dropTargetAssignmentId: null,
-                                        dropTargetSoldierId: null,
-                                      });
+                                      setDragState(emptyDragState);
                                     }}
-                                    className={`px-2 py-1 rounded text-xs cursor-pointer select-none transition-all ${isDropTarget
-                                      ? 'ring-2 ring-green-400 bg-green-600 text-white'
-                                      : isHighlighted
-                                        ? 'bg-yellow-500 text-black font-bold shadow-lg transform'
-                                        : hasWarning
-                                          ? 'bg-purple-600 text-white hover:bg-purple-700'
-                                          : getSoldierGroupColor(assignment.soldierId)
-                                            ? 'text-white'
-                                            : 'bg-blue-600 text-white hover:bg-blue-700'
-                                      }`}
+                                    className={`px-2 py-1 rounded text-xs cursor-pointer select-none transition-all ${
+                                      isAssignDropTarget
+                                        ? 'ring-2 ring-green-400 bg-green-600 text-white'
+                                        : isHighlighted
+                                          ? 'bg-yellow-500 text-black font-bold shadow-lg'
+                                          : unfair
+                                            ? 'bg-orange-500 text-white hover:bg-orange-600'
+                                            : getSoldierGroupColor(assignment.soldierId)
+                                              ? 'text-white'
+                                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                                    }`}
                                     style={{
-                                      backgroundColor: !isDropTarget && !isHighlighted && !hasWarning && getSoldierGroupColor(assignment.soldierId)
+                                      backgroundColor: !isAssignDropTarget && !isHighlighted && !unfair && getSoldierGroupColor(assignment.soldierId)
                                         ? getSoldierGroupColor(assignment.soldierId)
                                         : undefined
                                     }}
                                     title={
-                                      isDropTarget
+                                      isAssignDropTarget
                                         ? 'שחרר כאן כדי להחליף עם חייל זה'
-                                        : isHighlighted
-                                          ? 'לחץ לביטול הדגשה'
-                                          : hasWarning
-                                            ? 'התראת מנוחה - לחץ להדגשת כל השיבוצים'
+                                        : unfair
+                                          ? buildUnfairTooltip(unfair)
+                                          : isHighlighted
+                                            ? 'לחץ לביטול הדגשה'
                                             : 'לחץ להדגשת כל השיבוצים של החייל'
                                     }
                                   >
                                     {soldier?.name || 'לא ידוע'}
-                                    {hasWarning && ' ⚠️'}
+                                    {unfair && ' ⚠️'}
                                     {isHighlighted && ' ★'}
-                                    {isHighlighted && restSlots > 0 && ` (${(restSlots * schedule.config.timeSlotDuration) / 60} שעות מנוחה)`}
+                                    {isHighlighted && restMinutes > 0 && ` (${(restMinutes / 60).toFixed(1)} שעות מנוחה)`}
                                   </div>
                                 );
                               })}
 
-                              {/* Empty slots indicators */}
+                              {/* Understaffed indicators */}
                               {Array.from({ length: Math.max(0, post.requiredGuards - assignments.length) }).map((_, index) => (
                                 <div
                                   key={`empty-${index}`}
-                                  className="px-2 py-1 rounded text-xs border border-dashed border-slate-500 text-slate-400"
+                                  className="px-2 py-1 rounded text-xs border border-dashed border-red-500 text-red-400"
                                 >
-                                  ריק
+                                  חסר חייל
                                 </div>
                               ))}
                             </div>
@@ -680,16 +576,10 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
           className="fixed bg-slate-700 border border-slate-600 rounded-lg shadow-lg z-50 py-2"
           style={{ left: assignmentContextMenu.x, top: assignmentContextMenu.y }}
         >
-          <button
-            onClick={handleRemoveFromSlot}
-            className="block w-full px-4 py-2 text-right text-sm hover:bg-slate-600 transition-colors"
-          >
+          <button onClick={handleRemoveFromSlot} className="block w-full px-4 py-2 text-right text-sm hover:bg-slate-600 transition-colors">
             הסר ממשמרת זו
           </button>
-          <button
-            onClick={handleRemoveFromAll}
-            className="block w-full px-4 py-2 text-right text-sm text-red-400 hover:bg-slate-600 transition-colors"
-          >
+          <button onClick={handleRemoveFromAll} className="block w-full px-4 py-2 text-right text-sm text-red-400 hover:bg-slate-600 transition-colors">
             הסר מכל המשמרות
           </button>
         </div>
@@ -701,38 +591,20 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
           className="fixed bg-slate-700 border border-slate-600 rounded-lg shadow-lg z-50 py-2"
           style={{ left: timeSlotContextMenu.x, top: timeSlotContextMenu.y }}
         >
-
-          <button
-            onClick={handleAddTimeSlotAbove}
-            className="block w-full px-4 py-2 text-right text-sm hover:bg-slate-600 transition-colors"
-          >
+          <button onClick={() => addTimeSlotBeforeOrAfter(timeSlotContextMenu.timeSlotId, true)} className="block w-full px-4 py-2 text-right text-sm hover:bg-slate-600 transition-colors">
             הוסף משמרת מעל
           </button>
-
-          <button
-            onClick={handleAddTimeSlotBelow}
-            className="block w-full px-4 py-2 text-right text-sm hover:bg-slate-600 transition-colors"
-          >
+          <button onClick={() => addTimeSlotBeforeOrAfter(timeSlotContextMenu.timeSlotId, false)} className="block w-full px-4 py-2 text-right text-sm hover:bg-slate-600 transition-colors">
             הוסף משמרת מתחת
           </button>
-
-          <button
-            onClick={handleClearTimeSlot}
-            className="block w-full px-4 py-2 text-right text-sm hover:bg-slate-600 transition-colors"
-          >
+          <button onClick={handleClearTimeSlot} className="block w-full px-4 py-2 text-right text-sm hover:bg-slate-600 transition-colors">
             נקה משמרת
           </button>
-
-          <button
-            onClick={handleRemoveTimeSlot}
-            className="block w-full px-4 py-2 text-right text-sm text-red-400 hover:bg-slate-600 transition-colors"
-          >
+          <button onClick={handleRemoveTimeSlot} className="block w-full px-4 py-2 text-right text-sm text-red-400 hover:bg-slate-600 transition-colors">
             מחק משמרת
           </button>
-
         </div>
-      )
-      }
+      )}
 
       {/* Swap Modal */}
       <SwapModal
@@ -747,4 +619,4 @@ export default function ScheduleTable({ schedule, onUpdateSchedule }: ScheduleTa
       />
     </div>
   );
-} 
+}

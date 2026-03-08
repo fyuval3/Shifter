@@ -5,35 +5,23 @@ import {
   Post,
   Soldier,
   ValidationResult,
+  UnfairAssignment,
   TimeSlotDuration,
-  RestWarningLevel
 } from '@/types';
 
-/**
- * Generate unique ID
- */
 export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
 
-/**
- * Format time string (24-hour format)
- */
 export function formatTime(hours: number, minutes: number): string {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
-/**
- * Parse time string to hours and minutes
- */
 export function parseTime(timeString: string): { hours: number; minutes: number } {
   const [hours, minutes] = timeString.split(':').map(Number);
   return { hours, minutes };
 }
 
-/**
- * Add minutes to a time string
- */
 export function addMinutes(timeString: string, minutesToAdd: number): string {
   const { hours, minutes } = parseTime(timeString);
   const totalMinutes = hours * 60 + minutes + minutesToAdd;
@@ -42,9 +30,6 @@ export function addMinutes(timeString: string, minutesToAdd: number): string {
   return formatTime(newHours, newMinutes);
 }
 
-/**
- * Calculate time difference in minutes
- */
 export function getTimeDifferenceInMinutes(startTime: string, endTime: string): number {
   const start = parseTime(startTime);
   const end = parseTime(endTime);
@@ -52,7 +37,6 @@ export function getTimeDifferenceInMinutes(startTime: string, endTime: string): 
   const startMinutes = start.hours * 60 + start.minutes;
   let endMinutes = end.hours * 60 + end.minutes;
 
-  // Handle overnight shifts
   if (endMinutes < startMinutes) {
     endMinutes += 24 * 60;
   }
@@ -60,9 +44,6 @@ export function getTimeDifferenceInMinutes(startTime: string, endTime: string): 
   return endMinutes - startMinutes;
 }
 
-/**
- * Generate time slots for a schedule
- */
 export function generateTimeSlots(
   startTime: string,
   endTime: string,
@@ -86,9 +67,6 @@ export function generateTimeSlots(
   return timeSlots;
 }
 
-/**
- * Check if a post is active during a specific time
- */
 export function isPostActiveAtTime(post: Post, timeString: string): boolean {
   if (!post.activeHours) return true;
 
@@ -96,7 +74,6 @@ export function isPostActiveAtTime(post: Post, timeString: string): boolean {
   const startHours = parseTime(post.activeHours.start).hours;
   const endHours = parseTime(post.activeHours.end).hours;
 
-  // Handle overnight shifts
   if (startHours > endHours) {
     return hours >= startHours || hours < endHours;
   }
@@ -104,9 +81,6 @@ export function isPostActiveAtTime(post: Post, timeString: string): boolean {
   return hours >= startHours && hours < endHours;
 }
 
-/**
- * Get assignments for a specific time slot and post
- */
 export function getAssignmentsForSlotAndPost(
   assignments: Assignment[],
   timeSlotId: string,
@@ -117,9 +91,6 @@ export function getAssignmentsForSlotAndPost(
   );
 }
 
-/**
- * Get all assignments for a soldier
- */
 export function getAssignmentsForSoldier(
   assignments: Assignment[],
   soldierId: string
@@ -127,9 +98,6 @@ export function getAssignmentsForSoldier(
   return assignments.filter(a => a.soldierId === soldierId);
 }
 
-/**
- * Check if a soldier is assigned to a specific time slot
- */
 export function isSoldierAssignedToSlot(
   assignments: Assignment[],
   soldierId: string,
@@ -140,58 +108,6 @@ export function isSoldierAssignedToSlot(
   );
 }
 
-function calculateExpectedRestSlots(posts: Post[], soldiers: Soldier[]): [number, number] {
-  const availableSoldiers = soldiers.filter(s => s.isAvailable).length;
-  const soldiersNeededPerSlot = posts.reduce((sum, post) => sum + post.requiredGuards, 0);
-
-  const unroundedRestSlots = availableSoldiers / soldiersNeededPerSlot - 1;
-  const minExpectedRestSlots = Math.floor(unroundedRestSlots);
-  const maxExpectedRestSlots = Math.ceil(unroundedRestSlots);
-
-  return [minExpectedRestSlots, maxExpectedRestSlots];
-}
-
-/**
- * Calculate ideal rest slots between assignments
- */
-export function calculateIdealRestSlots(
-  posts: Post[],
-  soldiers: Soldier[],
-  timeSlots: TimeSlot[]
-): number {
-  const availableSoldiers = soldiers.filter(s => s.isAvailable);
-  const totalSoldiersNeeded = posts.reduce((sum, post) => {
-    return sum + timeSlots.filter(slot =>
-      isPostActiveAtTime(post, slot.startTime)
-    ).length * post.requiredGuards;
-  }, 0);
-
-  const soldiersNeededPerSlot = totalSoldiersNeeded / timeSlots.length;
-
-  if (soldiersNeededPerSlot === 0) return 0;
-
-  return Math.floor(availableSoldiers.length / soldiersNeededPerSlot) - 1;
-}
-
-/**
- * Get rest slots between two assignments for a soldier
- */
-export function getRestSlotsBetweenAssignments(
-  timeSlots: TimeSlot[],
-  assignment1: Assignment,
-  assignment2: Assignment
-): number {
-  const slot1Index = timeSlots.findIndex(s => s.id === assignment1.timeSlotId);
-  const slot2Index = timeSlots.findIndex(s => s.id === assignment2.timeSlotId);
-
-  if (slot1Index === -1 || slot2Index === -1) return 0;
-
-  return Math.abs(slot2Index - slot1Index) - 1;
-}
-
-/**
- * Remove soldier from all assignments
- */
 export function removeSoldierFromAllAssignments(
   assignments: Assignment[],
   soldierId: string
@@ -199,9 +115,6 @@ export function removeSoldierFromAllAssignments(
   return assignments.filter(a => a.soldierId !== soldierId);
 }
 
-/**
- * Remove soldier from specific time slot
- */
 export function removeSoldierFromTimeSlot(
   assignments: Assignment[],
   soldierId: string,
@@ -212,9 +125,6 @@ export function removeSoldierFromTimeSlot(
   );
 }
 
-/**
- * Swap soldiers between assignments
- */
 export function swapSoldierAssignments(
   assignments: Assignment[],
   assignment1Id: string,
@@ -235,36 +145,179 @@ export function swapSoldierAssignments(
   return newAssignments;
 }
 
-export const filterIrrelevantAssignments = (assignments: Assignment[], timeSlots: TimeSlot[], soldiers: Soldier[], posts: Post[]): Assignment[] => {
-  const existingTimeSlotIds = timeSlots.map(t => t.id);
-  const existingSoldierIds = soldiers.filter(s => s.isAvailable).map(s => s.id);
-  const existingPostIds = posts.map(p => p.id);
+export const filterIrrelevantAssignments = (
+  assignments: Assignment[],
+  timeSlots: TimeSlot[],
+  soldiers: Soldier[],
+  posts: Post[]
+): Assignment[] => {
+  const existingTimeSlotIds = new Set(timeSlots.map(t => t.id));
+  const existingSoldierIds = new Set(soldiers.filter(s => s.isAvailable).map(s => s.id));
+  const existingPostIds = new Set(posts.map(p => p.id));
+  const postMap = new Map(posts.map(p => [p.id, p]));
+  const slotMap = new Map(timeSlots.map(t => [t.id, t]));
 
   return assignments.filter(a =>
-    existingSoldierIds.includes(a.soldierId) &&
-    existingTimeSlotIds.includes(a.timeSlotId) &&
-    existingPostIds.includes(a.postId) &&
-    isPostActiveAtTime(getPostById(posts, a.postId), getTimeSlotById(timeSlots, a.timeSlotId).startTime)
+    existingSoldierIds.has(a.soldierId) &&
+    existingTimeSlotIds.has(a.timeSlotId) &&
+    existingPostIds.has(a.postId) &&
+    isPostActiveAtTime(postMap.get(a.postId)!, slotMap.get(a.timeSlotId)!.startTime)
   );
+};
+
+// ---------------------------------------------------------------------------
+// Fairness system
+// ---------------------------------------------------------------------------
+
+function isTimeInRange(timeString: string, rangeStart: string, rangeEnd: string): boolean {
+  const t = parseTime(timeString);
+  const s = parseTime(rangeStart);
+  const e = parseTime(rangeEnd);
+
+  const tMin = t.hours * 60 + t.minutes;
+  const sMin = s.hours * 60 + s.minutes;
+  const eMin = e.hours * 60 + e.minutes;
+
+  if (sMin <= eMin) {
+    return tMin >= sMin && tMin < eMin;
+  }
+  // Overnight range
+  return tMin >= sMin || tMin < eMin;
 }
 
-const getPostById = (posts: Post[], postId: string) => posts.find(p => p.id === postId)!
+export function isSoldierAvailableAtTime(soldier: Soldier, timeSlotStartTime: string): boolean {
+  if (!soldier.isAvailable) return false;
 
-const getTimeSlotById = (timeSlots: TimeSlot[], timeSlotId: string) => timeSlots.find(t => t.id === timeSlotId)!
+  for (const period of soldier.unavailability) {
+    if (isTimeInRange(timeSlotStartTime, period.startTime, period.endTime)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function isSoldierEligibleForPost(soldier: Soldier, post: Post): boolean {
+  if (post.eligibleRoleIds.length === 0) return true;
+  if (soldier.roleIds.length === 0 && post.eligibleRoleIds.length > 0) return false;
+  return soldier.roleIds.some(rid => post.eligibleRoleIds.includes(rid));
+}
+
+export function getEligibleSoldiersForPost(
+  post: Post,
+  allSoldiers: Soldier[],
+  assignments: Assignment[],
+  timeSlotId: string,
+  timeSlotStartTime: string
+): Soldier[] {
+  return allSoldiers.filter(soldier => {
+    if (!isSoldierAvailableAtTime(soldier, timeSlotStartTime)) return false;
+    if (!isSoldierEligibleForPost(soldier, post)) return false;
+    // Not already assigned to another post in this slot
+    const assignedInSlot = assignments.some(
+      a => a.soldierId === soldier.id && a.timeSlotId === timeSlotId
+    );
+    if (assignedInSlot) return false;
+    return true;
+  });
+}
 
 /**
- * Validate schedule assignments
+ * Calculate rest since last shift in minutes.
+ * Returns the time between the end of the soldier's most recent prior shift
+ * and the start of the given time slot. If no prior shift, returns time from
+ * schedule start to slot start.
  */
+export function calculateRestSinceLastShift(
+  soldierId: string,
+  currentTimeSlotIndex: number,
+  schedule: Schedule
+): number {
+  const soldierAssignmentSlots = new Set(
+    schedule.assignments
+      .filter(a => a.soldierId === soldierId)
+      .map(a => a.timeSlotId)
+  );
+
+  for (let i = currentTimeSlotIndex - 1; i >= 0; i--) {
+    if (soldierAssignmentSlots.has(schedule.timeSlots[i].id)) {
+      const lastShiftEnd = schedule.timeSlots[i].endTime;
+      const currentSlotStart = schedule.timeSlots[currentTimeSlotIndex].startTime;
+      return getTimeDifferenceInMinutes(lastShiftEnd, currentSlotStart);
+    }
+  }
+
+  // No prior assignment — rest is from schedule start to current slot start
+  const currentSlotStart = schedule.timeSlots[currentTimeSlotIndex].startTime;
+  return getTimeDifferenceInMinutes(schedule.config.startTime, currentSlotStart);
+}
+
+export function findUnfairAssignments(schedule: Schedule): UnfairAssignment[] {
+  const results: UnfairAssignment[] = [];
+  const slotIndexMap = new Map(schedule.timeSlots.map((s, i) => [s.id, i]));
+
+  for (const assignment of schedule.assignments) {
+    const slotIndex = slotIndexMap.get(assignment.timeSlotId);
+    if (slotIndex === undefined) continue;
+
+    const post = schedule.posts.find(p => p.id === assignment.postId);
+    const soldier = schedule.soldiers.find(s => s.id === assignment.soldierId);
+    if (!post || !soldier) continue;
+
+    const timeSlot = schedule.timeSlots[slotIndex];
+    const soldierRest = calculateRestSinceLastShift(soldier.id, slotIndex, schedule);
+
+    // Get soldiers eligible for this post at this time (excluding those already assigned to this slot)
+    const eligible = getEligibleSoldiersForPost(
+      post,
+      schedule.soldiers,
+      schedule.assignments,
+      timeSlot.id,
+      timeSlot.startTime
+    );
+
+    // Also include soldiers assigned to OTHER posts in this slot who are role-eligible,
+    // since we need the full picture. But the spec says "eligible" = matching role,
+    // available, and not assigned elsewhere. The assigned soldier themselves is already
+    // assigned, so they won't appear in eligible. We need to compare against soldiers
+    // who COULD have been chosen instead — those who are eligible but not assigned.
+    const moreRested: UnfairAssignment['moreRestedSoldiers'] = [];
+
+    for (const candidate of eligible) {
+      if (candidate.id === soldier.id) continue;
+      const candidateRest = calculateRestSinceLastShift(candidate.id, slotIndex, schedule);
+      if (candidateRest > soldierRest) {
+        moreRested.push({
+          soldierId: candidate.id,
+          soldierName: candidate.name,
+          restMinutes: candidateRest,
+          extraRestMinutes: candidateRest - soldierRest,
+        });
+      }
+    }
+
+    if (moreRested.length > 0) {
+      moreRested.sort((a, b) => b.extraRestMinutes - a.extraRestMinutes);
+      results.push({
+        assignmentId: assignment.id,
+        soldierId: assignment.soldierId,
+        postId: assignment.postId,
+        timeSlotId: assignment.timeSlotId,
+        soldierRestMinutes: soldierRest,
+        moreRestedSoldiers: moreRested,
+      });
+    }
+  }
+
+  return results;
+}
+
 export function validateSchedule(schedule: Schedule): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const soldierRestWarnings: ValidationResult['soldierRestWarnings'] = [];
   const unassignedSoldiers: string[] = [];
 
-  const availableSoldiers = schedule.soldiers.filter(s => s.isAvailable);
-  const [minExpectedRestSlots, maxExpectedRestSlots] = calculateExpectedRestSlots(schedule.posts, availableSoldiers);
-
-  // Check each time slot and post combination
+  // Check each time slot and post combination for staffing
   for (const timeSlot of schedule.timeSlots) {
     for (const post of schedule.posts) {
       if (!isPostActiveAtTime(post, timeSlot.startTime)) continue;
@@ -275,17 +328,14 @@ export function validateSchedule(schedule: Schedule): ValidationResult {
         post.id
       );
 
-      // Check if correct number of guards are assigned
-      if (assignments.length !== post.requiredGuards) {
-        if (assignments.length < post.requiredGuards) {
-          errors.push(
-            `חסרים ${post.requiredGuards - assignments.length} שומרים ב${post.name} בזמן ${timeSlot.startTime}`
-          );
-        } else {
-          errors.push(
-            `יותר מדי שומרים ב${post.name} בזמן ${timeSlot.startTime} (${assignments.length}/${post.requiredGuards})`
-          );
-        }
+      if (assignments.length < post.requiredGuards) {
+        errors.push(
+          `חסרים ${post.requiredGuards - assignments.length} שומרים ב${post.name} בזמן ${timeSlot.startTime}`
+        );
+      } else if (assignments.length > post.requiredGuards) {
+        errors.push(
+          `יותר מדי שומרים ב${post.name} בזמן ${timeSlot.startTime} (${assignments.length}/${post.requiredGuards})`
+        );
       }
     }
   }
@@ -298,8 +348,7 @@ export function validateSchedule(schedule: Schedule): ValidationResult {
 
     const soldierCounts = new Map<string, number>();
     for (const assignment of slotAssignments) {
-      const count = soldierCounts.get(assignment.soldierId) || 0;
-      soldierCounts.set(assignment.soldierId, count + 1);
+      soldierCounts.set(assignment.soldierId, (soldierCounts.get(assignment.soldierId) || 0) + 1);
     }
 
     for (const [soldierId, count] of soldierCounts) {
@@ -312,59 +361,23 @@ export function validateSchedule(schedule: Schedule): ValidationResult {
     }
   }
 
-  // Check rest periods and unassigned soldiers
+  // Find unassigned soldiers
+  const availableSoldiers = schedule.soldiers.filter(s => s.isAvailable);
   for (const soldier of availableSoldiers) {
-    const soldierAssignments = getAssignmentsForSoldier(schedule.assignments, soldier.id)
-      .sort((a, b) => {
-        const aIndex = schedule.timeSlots.findIndex(s => s.id === a.timeSlotId);
-        const bIndex = schedule.timeSlots.findIndex(s => s.id === b.timeSlotId);
-        return aIndex - bIndex;
-      });
-
-    if (soldierAssignments.length === 0) {
+    const hasAssignment = schedule.assignments.some(a => a.soldierId === soldier.id);
+    if (!hasAssignment) {
       unassignedSoldiers.push(soldier.id);
-    } else {
-      // Check rest periods between consecutive assignments
-      for (let i = 0; i < soldierAssignments.length - 1; i++) {
-        const current = soldierAssignments[i];
-        const next = soldierAssignments[i + 1];
-        const restSlots = getRestSlotsBetweenAssignments(
-          schedule.timeSlots,
-          current,
-          next
-        );
-
-        if (minExpectedRestSlots > 0 && (restSlots < minExpectedRestSlots || restSlots > maxExpectedRestSlots)) {
-          soldierRestWarnings.push({
-            soldierId: soldier.id,
-            timeSlotId: next.timeSlotId,
-            actualRestSlots: restSlots,
-            minExpectedRestSlots,
-            maxExpectedRestSlots,
-            level: 'warning',
-          });
-        }
-      }
     }
   }
+
+  // Compute fairness flags
+  const unfairAssignments = findUnfairAssignments(schedule);
 
   return {
     isValid: errors.length === 0,
     errors,
     warnings,
-    soldierRestWarnings,
+    unfairAssignments,
     unassignedSoldiers,
   };
-}
-
-export function calculateCurrentRestSlotsForSoldier(soldierId: string, timeSlotIndex: number, schedule: Schedule): number {
-  const assignments = schedule.assignments.filter(a => a.soldierId === soldierId);
-
-  for (let i = timeSlotIndex - 1; i >= 0; i--) {
-    if (assignments.some(a => a.timeSlotId === schedule.timeSlots[i].id)) {
-      return timeSlotIndex - i - 1;
-    }
-  }
-
-  return -1;
 }

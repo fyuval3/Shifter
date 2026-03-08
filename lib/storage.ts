@@ -1,4 +1,4 @@
-import { Schedule, StorageData, UIState } from '@/types';
+import { Schedule, Soldier, Post, StorageData, UIState } from '@/types';
 
 const STORAGE_KEY = 'shifter-app-data';
 
@@ -76,23 +76,55 @@ export function getSchedule(id: string): Schedule | undefined {
  */
 export function getCurrentSchedule(): Schedule | undefined {
   const data = getStorageData();
+  let schedule: Schedule | undefined;
+
   if (data.currentScheduleId) {
-    const schedule = getSchedule(data.currentScheduleId);
-    if (schedule && !schedule.groups) {
-      schedule.groups = [];
+    schedule = getSchedule(data.currentScheduleId);
+  } else {
+    const schedules = data.schedules;
+    if (schedules.length > 0) {
+      schedule = schedules.reduce((latest, current) =>
+        new Date(current.updatedAt) > new Date(latest.updatedAt) ? current : latest
+      );
     }
-    return schedule;
   }
-  
-  // Return the most recently updated schedule if no current one is set
-  const schedules = data.schedules;
-  if (schedules.length > 0) {
-    return schedules.reduce((latest, current) => 
-      new Date(current.updatedAt) > new Date(latest.updatedAt) ? current : latest
-    );
+
+  if (schedule) {
+    migrateSchedule(schedule);
   }
-  
-  return undefined;
+
+  return schedule;
+}
+
+/**
+ * Migrate a schedule from older data formats to the current schema.
+ * Mutates the schedule in place.
+ */
+function migrateSchedule(schedule: Schedule): void {
+  if (!schedule.groups) {
+    schedule.groups = [];
+  }
+  if (!schedule.roles) {
+    schedule.roles = [];
+  }
+  schedule.soldiers = schedule.soldiers.map(migrateSoldier);
+  schedule.posts = schedule.posts.map(migratePost);
+}
+
+function migrateSoldier(s: Soldier): Soldier {
+  return {
+    ...s,
+    roleIds: s.roleIds ?? [],
+    unavailability: s.unavailability ?? [],
+    isAvailable: s.isAvailable ?? true,
+  };
+}
+
+function migratePost(p: Post): Post {
+  return {
+    ...p,
+    eligibleRoleIds: p.eligibleRoleIds ?? [],
+  };
 }
 
 /**

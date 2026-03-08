@@ -22,14 +22,29 @@ export interface Group {
   color: GroupColor;
 }
 
+// Role interface for eligibility constraints
+export interface Role {
+  id: string;
+  name: string;
+}
+
+// Unavailability period for a soldier
+export interface UnavailabilityPeriod {
+  id: string;
+  startTime: string; // HH:mm
+  endTime: string;   // HH:mm
+  reason?: string;
+}
+
 // Post (guard position) interface
 export interface Post {
   id: string;
-  name: string; // e.g., "ש.ג.", "מגדל שמירה"
-  requiredGuards: number; // number of guards needed per time slot
+  name: string;
+  requiredGuards: number;
+  eligibleRoleIds: string[];
   activeHours?: {
-    start: string; // e.g., "21:00"
-    end: string; // e.g., "05:00"
+    start: string;
+    end: string;
   };
 }
 
@@ -37,8 +52,10 @@ export interface Post {
 export interface Soldier {
   id: string;
   name: string;
-  isAvailable: boolean; // whether they're currently available for assignment
-  groupId?: string; // optional group assignment
+  isAvailable: boolean;
+  roleIds: string[];
+  groupId?: string;
+  unavailability: UnavailabilityPeriod[];
 }
 
 export interface Shift {
@@ -55,8 +72,8 @@ export interface NewAssignment {
 // Time slot interface
 export interface TimeSlot {
   id: string;
-  startTime: string; // e.g., "21:00"
-  endTime: string; // e.g., "21:30"
+  startTime: string;
+  endTime: string;
 }
 
 // Assignment of a soldier to a specific post in a time slot
@@ -70,8 +87,8 @@ export interface Assignment {
 // Schedule configuration
 export interface ScheduleConfig {
   timeSlotDuration: TimeSlotDuration;
-  startTime: string; // e.g., "21:00"
-  endTime: string; // e.g., "05:00"
+  startTime: string;
+  endTime: string;
 }
 
 // Main schedule interface
@@ -82,29 +99,35 @@ export interface Schedule {
   posts: Post[];
   soldiers: Soldier[];
   groups: Group[];
+  roles: Role[];
   timeSlots: TimeSlot[];
   assignments: Assignment[];
   createdAt: string;
   updatedAt: string;
 }
 
-// Rest period warning levels
-export type RestWarningLevel = 'none' | 'warning' | 'error';
+// Unfair assignment detected by the fairness system
+export interface UnfairAssignment {
+  assignmentId: string;
+  soldierId: string;
+  postId: string;
+  timeSlotId: string;
+  soldierRestMinutes: number;
+  moreRestedSoldiers: {
+    soldierId: string;
+    soldierName: string;
+    restMinutes: number;
+    extraRestMinutes: number;
+  }[];
+}
 
 // Validation result for assignments
 export interface ValidationResult {
   isValid: boolean;
   errors: string[];
   warnings: string[];
-  soldierRestWarnings: {
-    soldierId: string;
-    timeSlotId: string;
-    actualRestSlots: number;
-    minExpectedRestSlots: number;
-    maxExpectedRestSlots: number;
-    level: RestWarningLevel;
-  }[];
-  unassignedSoldiers: string[]; // soldier IDs not assigned to any slot
+  unfairAssignments: UnfairAssignment[];
+  unassignedSoldiers: string[];
 }
 
 // Export format options for WhatsApp
@@ -131,4 +154,4 @@ export interface StorageData {
   currentScheduleId?: string;
   uiState: UIState;
   lastUpdated: string;
-} 
+}
